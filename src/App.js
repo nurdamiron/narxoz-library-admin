@@ -1,4 +1,5 @@
-import React from 'react';
+// src/App.js
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { createTheme, ThemeProvider, CssBaseline } from '@mui/material';
 import { AuthProvider } from './context/AuthContext';
@@ -14,6 +15,7 @@ import UserForm from './pages/users/UserForm';
 import CategoriesList from './pages/categories/CategoriesList';
 import Login from './pages/Login';
 import NotFound from './pages/NotFound';
+import { getAuthHeaders } from './utils/authHeadersService';
 
 /**
  * Басты қосымша компоненті
@@ -81,6 +83,15 @@ const theme = createTheme({
       },
     },
   },
+  breakpoints: {
+    values: {
+      xs: 0,
+      sm: 600,
+      md: 960,
+      lg: 1280,
+      xl: 1920,
+    },
+  },
 });
 
 /**
@@ -89,6 +100,28 @@ const theme = createTheme({
  * @returns {JSX.Element} - Қосымша компоненті
  */
 function App() {
+  // Демо режим үшін - әкімші мәліметтерін орнату
+  // useEffect(() => {
+  //   // Тек жасалмаған жағдайда
+  //   if (!localStorage.getItem('auth_user')) {
+  //     console.log('Setting up demo admin credentials');
+      
+  //     localStorage.setItem('auth_username', 'admin@narxoz.kz');
+  //     localStorage.setItem('auth_password', 'admin123');
+  //     localStorage.setItem('auth_user', JSON.stringify({
+  //       id: 1,
+  //       email: 'admin@narxoz.kz',
+  //       name: 'Әкімші',
+  //       role: 'admin'
+  //     }));
+  //     localStorage.setItem('isAuthenticated', 'true');
+  //   }
+    
+  //   // Аутентификация хедерлерін тексеру
+  //   const headers = getAuthHeaders();
+  //   console.log('Initial auth headers:', headers);
+  // }, []);
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />

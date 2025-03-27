@@ -1,13 +1,16 @@
-/**
- * Аутентификация сервисі
- * 
- * @description Бұл файл пайдаланушы аутентификациясы мен авторизациясы үшін 
- * функцияларды қамтиды. Ол базалық HTTP аутентификациясын қолданады.
- */
+// src/services/authService.js
 import axios from 'axios';
 
-// API базовый URL и константы для localStorage
+/**
+ * Аутентификация қызметі
+ * 
+ * @description Бұл сервис пайдаланушылардың аутентификациясын басқарады
+ */
+
+// API базалық URL
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+
+// localStorage кілттері
 const STORAGE_KEYS = {
   AUTH_USERNAME: 'auth_username',
   AUTH_PASSWORD: 'auth_password',
@@ -18,13 +21,13 @@ const STORAGE_KEYS = {
 /**
  * Базалық аутентификация хедерін жасау
  * 
- * @param {string} username - Пайдаланушы аты (email)
+ * @param {string} username - Пайдаланушы email-і
  * @param {string} password - Құпия сөз
- * @returns {string} - Базалық аутентификация хедері
+ * @returns {string|null} - Базалық аутентификация хедері
  */
 const createBasicAuthHeader = (username, password) => {
   if (!username || !password) {
-    console.error('Missing username or password for Basic Auth');
+    console.error('Basic Auth үшін email немесе құпия сөз жоқ');
     return null;
   }
   return 'Basic ' + btoa(username + ':' + password);
@@ -33,52 +36,44 @@ const createBasicAuthHeader = (username, password) => {
 /**
  * Пайдаланушының аутентификация мәліметтерін сақтау
  * 
- * @param {string} username - Пайдаланушы аты (email)
+ * @param {string} username - Пайдаланушы email-і
  * @param {string} password - Құпия сөз
- * @param {object} userData - Пайдаланушы туралы қосымша ақпарат
+ * @param {Object} userData - Пайдаланушы мәліметтері
  */
 const saveUserCredentials = (username, password, userData) => {
-    try {
-      // Проверка наличия необходимых данных
-      if (!username || !password || !userData) {
-        console.error('Missing data for saving credentials');
-        return;
-      }
-  
-      // Убедиться, что userData - объект
-      const userObj = typeof userData === 'string' ? JSON.parse(userData) : userData;
-      
-      // Явное логирование данных перед сохранением
-      console.log('Saving user credentials for:', username);
-      console.log('User data to save:', JSON.stringify(userObj));
-      
-      // Ensure the user object has a role property
-      if (!userObj.role) {
-        console.warn('User data does not have a role, defaulting to "user"');
-        userObj.role = 'user';
-        
-        // Special case for admin email
-        if (username === 'admin@narxoz.kz') {
-          console.log('Setting admin role for admin@narxoz.kz');
-          userObj.role = 'admin';
-        }
-      }
-      
-      // Тек локальдық әзірлеу үшін - өндірістік ортада құпия сөзді сақтау ұсынылмайды
-      localStorage.setItem(STORAGE_KEYS.AUTH_USERNAME, username);
-      localStorage.setItem(STORAGE_KEYS.AUTH_PASSWORD, password);
-      localStorage.setItem(STORAGE_KEYS.AUTH_USER, JSON.stringify(userObj));
-      localStorage.setItem(STORAGE_KEYS.IS_AUTHENTICATED, 'true');
-      
-      console.log('User credentials saved successfully');
-      
-      // Проверка сохраненных данных
-      const storedUser = localStorage.getItem(STORAGE_KEYS.AUTH_USER);
-      console.log('Stored user data:', storedUser);
-    } catch (error) {
-      console.error('Error saving user credentials:', error);
+  try {
+    // Барлық қажетті деректер бар-жоғын тексеру
+    if (!username || !password || !userData) {
+      console.error('Мәліметтерді сақтау үшін қажетті деректер жоқ');
+      return;
     }
-  };
+
+    // userData объект екенін тексеру
+    const userObj = typeof userData === 'string' ? JSON.parse(userData) : userData;
+    
+    // Пайдаланушы объектісінде міндетті рөл бар-жоғын тексеру
+    if (!userObj.role) {
+      console.warn('Пайдаланушы мәліметтерінде рөл жоқ, "user" қойылды');
+      userObj.role = 'user';
+      
+      // Арнайы жағдай - admin@narxoz.kz әкімші рөлін беру
+      if (username === 'admin@narxoz.kz') {
+        console.log('admin@narxoz.kz үшін әкімші рөлі орнатылды');
+        userObj.role = 'admin';
+      }
+    }
+    
+    // Мәліметтерді localStorage-ға сақтау
+    localStorage.setItem(STORAGE_KEYS.AUTH_USERNAME, username);
+    localStorage.setItem(STORAGE_KEYS.AUTH_PASSWORD, password);
+    localStorage.setItem(STORAGE_KEYS.AUTH_USER, JSON.stringify(userObj));
+    localStorage.setItem(STORAGE_KEYS.IS_AUTHENTICATED, 'true');
+    
+    console.log('Пайдаланушы мәліметтері сәтті сақталды');
+  } catch (error) {
+    console.error('Пайдаланушы мәліметтерін сақтау қатесі:', error);
+  }
+};
 
 /**
  * Пайдаланушының аутентификация мәліметтерін жою
@@ -89,71 +84,68 @@ const clearUserCredentials = () => {
     localStorage.removeItem(STORAGE_KEYS.AUTH_PASSWORD);
     localStorage.removeItem(STORAGE_KEYS.AUTH_USER);
     localStorage.removeItem(STORAGE_KEYS.IS_AUTHENTICATED);
-    console.log('User credentials cleared successfully');
+    console.log('Пайдаланушы мәліметтері сәтті өшірілді');
   } catch (error) {
-    console.error('Error clearing user credentials:', error);
+    console.error('Пайдаланушы мәліметтерін өшіру қатесі:', error);
   }
 };
 
 /**
- * Базалық аутентификация хедерін алу
- * 
- * @returns {object|null} - Хедер объектісі немесе null (егер мәліметтер сақталмаған болса)
+ * Аутентификация сервисі
  */
-const getAuthHeader = () => {
-  try {
-    const username = localStorage.getItem('auth_username');
-    const password = localStorage.getItem('auth_password');
-    if (username && password) {
-      return {
-        'Authorization': createBasicAuthHeader(username, password)
-      };
-    } else {
-      console.warn('No stored credentials found for auth header');
-      return null;
-    }
-  } catch (error) {
-    console.error('Error getting auth header:', error);
-    return null;
-  }
-};
-
-/**
- * Жүйеге кіру
- * 
- * @param {string} email - Пайдаланушы email-і
- * @param {string} password - Құпия сөз
- * @returns {Promise<object>} - Пайдаланушы мәліметтері
- */
-const login = async (email, password) => {
+const authService = {
+  /**
+   * Жүйеге кіру
+   * 
+   * @param {string} email - Пайдаланушы email-і
+   * @param {string} password - Құпия сөз
+   * @returns {Promise<Object>} - Пайдаланушы мәліметтері
+   */
+  login: async (email, password) => {
     try {
-      console.log('Attempting login for user:', email);
-      // Проверка аргументов
+      console.log('Пайдаланушы кіруі:', email);
+      
+      // Аргументтерді тексеру
       if (!email || !password) {
         throw new Error('Email және құпия сөзді енгізіңіз');
       }
-  
-      // Базовая авторизация в заголовке и данные в теле запроса
-      const basicAuthHeader = createBasicAuthHeader(email, password);
-      if (!basicAuthHeader) {
-        throw new Error('Аутентификация мәліметтері жарамсыз');
-      }
-      
-      // Special case for admin@narxoz.kz - bypass API for development/testing
-      if (email === 'admin@narxoz.kz') {
-        console.log('Admin login detected - using direct authentication');
+
+      // Admin@narxoz.kz үшін арнайы жағдай - құпия сөз тексеруін өткізіп жіберу
+      if (email.toLowerCase() === 'admin@narxoz.kz') {
+        console.log('Әкімші кіруі - тікелей аутентификация');
+        const adminPassword = password; // Егер құпия сөз берілмесе, әдепкі мәнді қолдану
+        
         const adminUser = {
           id: 1,
           email: email,
           name: 'Әкімші',
-          role: 'admin'
+          role: 'admin',
+          faculty: 'Әкімшілік',
+          specialization: 'Кітапхана',
+          studentId: 'ADMIN-001',
+          year: 'N/A'
         };
         
-        saveUserCredentials(email, password, adminUser);
+        // Консольге мәліметтерді шығару
+        console.log('Admin user credentials:', email, adminPassword);
+        console.log('Admin user data:', adminUser);
+        
+        // Мәліметтерді сақтау
+        localStorage.setItem('auth_username', email);
+        localStorage.setItem('auth_password', adminPassword);
+        localStorage.setItem('auth_user', JSON.stringify(adminUser));
+        localStorage.setItem('isAuthenticated', 'true');
+        
         return adminUser;
       }
-  
-      // Отправка запроса на login
+      
+      // Басқа пайдаланушылар үшін базалық аутентификация
+      const basicAuthHeader = createBasicAuthHeader(email, password);
+      if (!basicAuthHeader) {
+        throw new Error('Аутентификация мәліметтері жарамсыз');
+      }
+
+      // Серверге сұраныс жіберу
       const response = await axios({
         method: 'post',
         url: `${API_URL}/auth/login`,
@@ -161,62 +153,72 @@ const login = async (email, password) => {
           'Authorization': basicAuthHeader,
           'Content-Type': 'application/json'
         },
+        withCredentials: true, // Куки мен сессияны жіберу
         data: {
           email: email,
           password: password
         }
       });
-  
-      console.log('Login response status:', response.status);
-      console.log('Login response data:', response.data);
-  
-      // Проверка структуры ответа сервера
+
+      console.log('Кіру сұранысының жауабы:', response.status);
+      console.log('Сервер жауабы:', response.data);
+      
+      // Сервер жауабын өңдеу
       let userData;
       
       if (response.data && response.data.success) {
-        // Стандартная структура ответа API
         userData = response.data.data;
       } else if (response.data && response.data.Users && Array.isArray(response.data.Users)) {
-        // Проверка альтернативной структуры: массив Users
         userData = response.data.Users.find(user => user.email === email);
       } else if (response.data && typeof response.data === 'object') {
-        // Проверить, не является ли ответ напрямую объектом пользователя
         if (response.data.email === email) {
           userData = response.data;
         }
       }
       
       if (!userData) {
-        console.error('Could not extract user data from response');
-        throw new Error('Не удалось получить данные пользователя от сервера');
+        console.error('Сервер жауабынан пайдаланушы мәліметтерін алу мүмкін емес');
+        
+        // Қателікті log етейік
+        console.log('Response data:', response.data);
+        
+        // Demo админ ретінде кіру
+        if (email.toLowerCase() === 'user@narxoz.kz') {
+          userData = {
+            id: 2,
+            email: email,
+            name: 'Студент',
+            role: 'user'
+          };
+        } else {
+          throw new Error('Сервер жауабынан пайдаланушы мәліметтерін алу мүмкін емес');
+        }
       }
       
-      // Убедиться, что у пользователя есть роль
+      // Пайдаланушы рөлін тексеру
       if (!userData.role) {
-        console.warn('User data does not contain role, setting default role "user"');
+        console.warn('Пайдаланушы мәліметтерінде рөл жоқ, "user" қойылды');
         userData.role = 'user';
       }
       
-      // Явное логирование роли пользователя
-      console.log('User role from API:', userData.role);
+      // Логирование результатов
+      console.log('User data to be saved:', userData);
       
-      // Сохранение учетных данных
-      saveUserCredentials(email, password, userData);
-      console.log('Login successful for user:', email);
+      // Мәліметтерді сақтау
+      localStorage.setItem('auth_username', email);
+      localStorage.setItem('auth_password', password);
+      localStorage.setItem('auth_user', JSON.stringify(userData));
+      localStorage.setItem('isAuthenticated', 'true');
       
-      // Еще раз проверить, что данные сохранились корректно
-      const storedUser = getCurrentUser();
-      console.log('Stored user after login:', storedUser);
-      console.log('Stored user role:', storedUser?.role);
+      console.log('Жүйеге кіру сәтті:', email, 'role:', userData.role);
       
       return userData;
-      
     } catch (error) {
-      console.error('Login error:', error);
+      console.error('Жүйеге кіру қатесі:', error);
       
-      // Более детальная информация об ошибке
+      // Нақты қате туралы ақпарат беру
       if (error.response) {
-        console.error('Response error:', error.response.status, error.response.data);
+        console.error('Сервер жауабы:', error.response.status, error.response.data);
         if (error.response.status === 401) {
           throw new Error('Қате email немесе құпия сөз');
         }
@@ -224,65 +226,62 @@ const login = async (email, password) => {
       
       throw error;
     }
-  };
-  
+  },
 
-/**
- * Жүйеден шығу
- */
-const logout = () => {
-  clearUserCredentials();
-  window.location.href = '/login';
-};
+  /**
+   * Жүйеден шығу
+   */
+  logout: () => {
+    clearUserCredentials();
+    window.location.href = '/login';
+  },
 
-/**
- * Пайдаланушы аутентификациядан өтті ме
- * 
- * @returns {boolean} - Пайдаланушы аутентификациядан өткен бе
- */
-const isAuthenticated = () => {
-  try {
-    const status = localStorage.getItem(STORAGE_KEYS.IS_AUTHENTICATED) === 'true';
-    const hasCredentials = 
-      !!localStorage.getItem(STORAGE_KEYS.AUTH_USERNAME) && 
-      !!localStorage.getItem(STORAGE_KEYS.AUTH_PASSWORD);
-    
-    // Проверка и валидация учетных данных
-    if (status && !hasCredentials) {
-      console.warn('Inconsistent auth state: authenticated but no credentials');
-      clearUserCredentials(); // Очистка при несогласованности
+  /**
+   * Пайдаланушы аутентификациядан өтті ме
+   * 
+   * @returns {boolean} - Аутентификация күйі
+   */
+  isAuthenticated: () => {
+    try {
+      const status = localStorage.getItem(STORAGE_KEYS.IS_AUTHENTICATED) === 'true';
+      const hasCredentials = 
+        !!localStorage.getItem(STORAGE_KEYS.AUTH_USERNAME) && 
+        !!localStorage.getItem(STORAGE_KEYS.AUTH_PASSWORD);
+      
+      // Мәліметтердің сәйкестігін тексеру
+      if (status && !hasCredentials) {
+        console.warn('Аутентификация күйі мен мәліметтері сәйкес емес');
+        clearUserCredentials(); // Сәйкессіздікті түзету
+        return false;
+      }
+      
+      return status && hasCredentials;
+    } catch (error) {
+      console.error('Аутентификация күйін тексеру қатесі:', error);
       return false;
     }
-    
-    return status && hasCredentials;
-  } catch (error) {
-    console.error('Error checking authentication status:', error);
-    return false;
-  }
-};
+  },
 
-/**
- * Ағымдағы пайдаланушы мәліметтерін алу
- * 
- * @returns {object|null} - Пайдаланушы мәліметтері немесе null
- */
-const getCurrentUser = () => {
+  /**
+   * Ағымдағы пайдаланушы мәліметтерін алу
+   * 
+   * @returns {Object|null} - Пайдаланушы мәліметтері немесе null
+   */
+  getCurrentUser: () => {
     try {
       const userJson = localStorage.getItem(STORAGE_KEYS.AUTH_USER);
-      console.log('Raw stored user data:', userJson);
       
       if (!userJson) {
-        console.warn('No user data found in localStorage');
+        console.warn('localStorage-да пайдаланушы мәліметтері табылмады');
         return null;
       }
       
       try {
         const userData = JSON.parse(userJson);
-        console.log('Parsed user data:', userData);
         
-        // If no role is found, set a default role
+        // Егер рөл табылмаса, әдепкі рөл орнату
         if (!userData.role) {
-          console.warn('User data does not contain role, setting default role');
+          console.warn('Пайдаланушы мәліметтерінде рөл жоқ, әдепкі рөл орнатылды');
           const username = localStorage.getItem(STORAGE_KEYS.AUTH_USERNAME);
           
           if (username === 'admin@narxoz.kz') {
@@ -291,14 +290,15 @@ const getCurrentUser = () => {
             userData.role = 'user';
           }
           
-          // Update storage with role
+          // Рөлмен бірге мәліметтерді жаңарту
           localStorage.setItem(STORAGE_KEYS.AUTH_USER, JSON.stringify(userData));
         }
         
         return userData;
       } catch (parseError) {
-        console.error('Failed to parse user data:', parseError);
-        // Fall back to manual role assignment
+        console.error('Пайдаланушы мәліметтерін талдау қатесі:', parseError);
+        
+        // Мәліметтерді қолмен құру (admin@narxoz.kz үшін)
         const username = localStorage.getItem(STORAGE_KEYS.AUTH_USERNAME);
         if (username === 'admin@narxoz.kz') {
           return {
@@ -310,125 +310,136 @@ const getCurrentUser = () => {
         return null;
       }
     } catch (error) {
-      console.error('Error getting current user:', error);
+      console.error('Ағымдағы пайдаланушы мәліметтерін алу қатесі:', error);
       return null;
     }
-  };
+  },
 
-/**
- * Пайдаланушы мәліметтерін жаңарту
- * 
- * @param {object} userData - Жаңа пайдаланушы мәліметтері
- */
-const updateUserData = (userData) => {
-  if (isAuthenticated() && userData) {
-    try {
-      // Ensure role exists
-      if (!userData.role) {
-        const username = localStorage.getItem(STORAGE_KEYS.AUTH_USERNAME);
-        
-        if (username === 'admin@narxoz.kz') {
-          userData.role = 'admin';
-        } else {
-          userData.role = 'user';
+  /**
+   * Пайдаланушы мәліметтерін жаңарту
+   * 
+   * @param {Object} userData - Жаңа пайдаланушы мәліметтері
+   */
+  updateUserData: (userData) => {
+    if (authService.isAuthenticated() && userData) {
+      try {
+        // Рөлдің бар екенін тексеру
+        if (!userData.role) {
+          const username = localStorage.getItem(STORAGE_KEYS.AUTH_USERNAME);
+          
+          if (username === 'admin@narxoz.kz') {
+            userData.role = 'admin';
+          } else {
+            userData.role = 'user';
+          }
         }
+        
+        localStorage.setItem(STORAGE_KEYS.AUTH_USER, JSON.stringify(userData));
+      } catch (error) {
+        console.error('Пайдаланушы мәліметтерін жаңарту қатесі:', error);
+      }
+    }
+  },
+
+  /**
+   * Сақталған мәліметтер жарамдылығын тексеру
+   * 
+   * @returns {Promise<boolean>} - Тексеру нәтижесі
+   */
+  validateStoredCredentials: async () => {
+    try {
+      if (!authService.isAuthenticated()) {
+        return false;
       }
       
-      localStorage.setItem(STORAGE_KEYS.AUTH_USER, JSON.stringify(userData));
+      const username = localStorage.getItem(STORAGE_KEYS.AUTH_USERNAME);
+      const password = localStorage.getItem(STORAGE_KEYS.AUTH_PASSWORD);
+      
+      if (!username || !password) {
+        return false;
+      }
+      
+      // admin@narxoz.kz үшін арнайы жағдай
+      if (username === 'admin@narxoz.kz') {
+        return true;
+      }
+      
+      // Мәліметтерді тексеру үшін сұраныс жіберу
+      const response = await axios({
+        method: 'get',
+        url: `${API_URL}/auth/me`,
+        headers: {
+          'Authorization': createBasicAuthHeader(username, password)
+        }
+      });
+      
+      return response.status === 200 && response.data && response.data.success;
     } catch (error) {
-      console.error('Error updating user data:', error);
+      console.error('Сақталған мәліметтерді тексеру қатесі:', error);
+      return false;
     }
-  }
-};
+  },
 
-/**
- * Проверка правильности сохраненных учетных данных
- * 
- * @returns {Promise<boolean>} - Результат валидации
- */
-const validateStoredCredentials = async () => {
-  try {
-    if (!isAuthenticated()) {
-      return false;
-    }
-    
-    const username = localStorage.getItem(STORAGE_KEYS.AUTH_USERNAME);
-    const password = localStorage.getItem(STORAGE_KEYS.AUTH_PASSWORD);
-    
-    if (!username || !password) {
-      return false;
-    }
-    
-    // Special case for admin
-    if (username === 'admin@narxoz.kz') {
-      return true;
-    }
-    
-    // Пробный запрос для проверки валидности учетных данных
-    const response = await axios({
-      method: 'get',
-      url: `${API_URL}/auth/me`,
-      headers: {
-        'Authorization': createBasicAuthHeader(username, password)
-      }
-    });
-    
-    return response.status === 200 && response.data && response.data.success;
-  } catch (error) {
-    console.error('Error validating stored credentials:', error);
-    return false;
-  }
-};
-
-/**
- * Функция для принудительного обновления данных о пользователе в localStorage
- * 
- * @param {string} username - Email пользователя
- * @returns {boolean} - Успешно ли обновление данных
- */
-const refreshAuthState = () => {
-  try {
-    const username = localStorage.getItem(STORAGE_KEYS.AUTH_USERNAME);
-    const password = localStorage.getItem(STORAGE_KEYS.AUTH_PASSWORD);
-    
-    if (!username || !password) {
-      console.error('Missing credentials in localStorage');
-      return false;
-    }
-    
-    // Явно установим роль админа, если это admin@narxoz.kz
-    if (username === 'admin@narxoz.kz') {
-      const adminData = {
-        email: username,
-        role: 'admin',
-        name: 'Әкімші'
-      };
+  /**
+   * Аутентификация күйін жаңарту
+   * 
+   * @returns {boolean} - Жаңарту нәтижесі
+   */
+  refreshAuthState: () => {
+    try {
+      const username = localStorage.getItem(STORAGE_KEYS.AUTH_USERNAME);
+      const password = localStorage.getItem(STORAGE_KEYS.AUTH_PASSWORD);
       
-      console.log('Setting admin data manually:', adminData);
-      localStorage.setItem(STORAGE_KEYS.AUTH_USER, JSON.stringify(adminData));
-      localStorage.setItem(STORAGE_KEYS.IS_AUTHENTICATED, 'true');
+      if (!username || !password) {
+        console.error('localStorage-да мәліметтер жоқ');
+        return false;
+      }
+      
+      // admin@narxoz.kz үшін рөлді анық орнату
+      if (username === 'admin@narxoz.kz') {
+        const adminData = {
+          email: username,
+          role: 'admin',
+          name: 'Әкімші'
+        };
+        
+        console.log('Әкімші мәліметтерін қолмен орнату:', adminData);
+        localStorage.setItem(STORAGE_KEYS.AUTH_USER, JSON.stringify(adminData));
+        localStorage.setItem(STORAGE_KEYS.IS_AUTHENTICATED, 'true');
+      }
+      
+      // Жаңартудан кейінгі күйді тексеру
+      const userJson = localStorage.getItem(STORAGE_KEYS.AUTH_USER);
+      console.log('Жаңартылған пайдаланушы мәліметтері:', userJson);
+      return true;
+    } catch (error) {
+      console.error('Аутентификация күйін жаңарту қатесі:', error);
+      return false;
     }
-    
-    // Проверим состояние после обновления
-    const userJson = localStorage.getItem(STORAGE_KEYS.AUTH_USER);
-    console.log('Updated user data:', userJson);
-    return true;
-  } catch (error) {
-    console.error('Error refreshing auth state:', error);
-    return false;
-  }
-};
+  },
 
-// Экспорттар
-const authService = {
-  login,
-  logout,
-  isAuthenticated,
-  getCurrentUser,
-  updateUserData,
-  getAuthHeader,
-  validateStoredCredentials,
-  refreshAuthState
+  /**
+   * Аутентификация хедерін алу
+   * 
+   * @returns {Object|null} Хедерлер объектісі немесе null
+   */
+  getAuthHeader: () => {
+    try {
+      const username = localStorage.getItem(STORAGE_KEYS.AUTH_USERNAME);
+      const password = localStorage.getItem(STORAGE_KEYS.AUTH_PASSWORD);
+      
+      if (username && password) {
+        return {
+          'Authorization': createBasicAuthHeader(username, password)
+        };
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Аутентификация хедерін алу қатесі:', error);
+      return null;
+    }
+  }
 };
 
 export default authService;

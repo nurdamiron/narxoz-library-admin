@@ -1,181 +1,104 @@
-/**
- * Қарызға алулармен жұмыс істеуге арналған сервис
- * 
- * @description Бұл сервис кітаптарды қарызға алу операцияларын басқару үшін API функцияларын қамтиды
- */
-import api from './api';
+// src/services/borrowService.js
+import crudService from './crudService';
 
 /**
- * Барлық қарызға алуларды алу (тек әкімші/кітапханашы)
+ * Қарызға алу операцияларымен жұмыс істеуге арналған қызмет
  * 
- * @param {Object} params - Сұраныс параметрлері
- * @param {number} [params.page=1] - Бет нөмірі
- * @param {number} [params.limit=20] - Бір беттегі қарызға алулар саны
- * @param {string} [params.status] - Мәртебе бойынша сүзу
- * @param {number} [params.userId] - Пайдаланушы ID бойынша сүзу
- * @param {number} [params.bookId] - Кітап ID бойынша сүзу
- * @param {string} [params.startDate] - Бастапқы күні
- * @param {string} [params.endDate] - Соңғы күні
- * @param {boolean} [params.overdue] - Мерзімі өткен қарызға алуларды сүзу
- * @returns {Promise<Object>} - Қарызға алулар тізімі мен пагинация
+ * @description Бұл сервис кітаптарды қарызға алу және қайтару операцияларын басқарады
  */
-const getAllBorrows = async (params = {}) => {
-  try {
-    // Исправлен URL для соответствия с бэкендом
-    // В бэкенде используется маршрут /api/borrows 
-    // или GET /api/borrows с параметрами, вместо /api/borrows/all
-    const response = await api.get('/borrows', { params });
-    return response;
-  } catch (error) {
-    console.error('Қарызға алуларды алу қатесі:', error);
-    throw error;
-  }
-};
-
-/**
- * Жеке қарызға алуды алу
- * 
- * @param {number} id - Қарызға алу идентификаторы
- * @returns {Promise<Object>} - Қарызға алу мәліметтері
- */
-const getBorrow = async (id) => {
-  try {
-    const response = await api.get(`/borrows/${id}`);
-    return response;
-  } catch (error) {
-    console.error(`Қарызға алуды алу қатесі (ID: ${id}):`, error);
-    throw error;
-  }
-};
-
-/**
- * Кітапты қарызға алу
- * 
- * @param {number} bookId - Кітап идентификаторы
- * @returns {Promise<Object>} - Жаңа қарызға алу мәліметтері
- */
-const borrowBook = async (bookId) => {
-  try {
-    const response = await api.post('/borrows', { bookId });
-    return response;
-  } catch (error) {
-    console.error('Кітапты қарызға алу қатесі:', error);
-    throw error;
-  }
-};
-
-/**
- * Қарызға алынған кітапты қайтару
- * 
- * @param {number} id - Қарызға алу идентификаторы
- * @returns {Promise<Object>} - Жаңартылған қарызға алу мәліметтері
- */
-const returnBook = async (id) => {
-  try {
-    const response = await api.put(`/borrows/${id}/return`);
-    return response;
-  } catch (error) {
-    console.error(`Кітапты қайтару қатесі (ID: ${id}):`, error);
-    throw error;
-  }
-};
-
-/**
- * Қарызға алу мерзімін ұзарту
- * 
- * @param {number} id - Қарызға алу идентификаторы
- * @returns {Promise<Object>} - Жаңартылған қарызға алу мәліметтері
- */
-const extendBorrow = async (id) => {
-  try {
-    const response = await api.put(`/borrows/${id}/extend`);
-    return response;
-  } catch (error) {
-    console.error(`Қарызға алу мерзімін ұзарту қатесі (ID: ${id}):`, error);
-    throw error;
-  }
-};
-
-/**
- * Қарызға алу мәліметтерін жаңарту (тек әкімші/кітапханашы)
- * 
- * @param {number} id - Қарызға алу идентификаторы
- * @param {Object} borrowData - Жаңартылған қарызға алу мәліметтері
- * @param {string} [borrowData.status] - Қарызға алу мәртебесі
- * @param {string} [borrowData.dueDate] - Қайтару мерзімі
- * @param {string} [borrowData.notes] - Ескертпелер
- * @returns {Promise<Object>} - Жаңартылған қарызға алу мәліметтері
- */
-const updateBorrow = async (id, borrowData) => {
-  try {
-    const response = await api.put(`/borrows/${id}`, borrowData);
-    return response;
-  } catch (error) {
-    console.error(`Қарызға алуды жаңарту қатесі (ID: ${id}):`, error);
-    throw error;
-  }
-};
-
-/**
- * Мерзімі өткен қарызға алуларды тексеру
- * 
- * @returns {Promise<Object>} - Мерзімі өткен қарызға алулар туралы ақпарат
- */
-const checkOverdueBorrows = async () => {
-  try {
-    const response = await api.get('/borrows/check-overdue');
-    return response;
-  } catch (error) {
-    console.error('Мерзімі өткен қарызға алуларды тексеру қатесі:', error);
-    throw error;
-  }
-};
-
-/**
- * Қарызға алу статистикасын алу
- * 
- * @returns {Promise<Object>} - Қарызға алу статистикасы
- */
-const getBorrowStats = async () => {
-  try {
-    const response = await api.get('/borrows/stats');
-    return response;
-  } catch (error) {
-    console.error('Қарызға алу статистикасын алу қатесі:', error);
-    throw error;
-  }
-};
-
-/**
- * Пайдаланушының барлық қарызға алуларын алу
- * 
- * @param {Object} params - Сұраныс параметрлері
- * @param {number} [params.page=1] - Бет нөмірі
- * @param {number} [params.limit=10] - Бір беттегі қарызға алулар саны
- * @param {string} [params.status] - Мәртебе бойынша сүзу
- * @returns {Promise<Object>} - Қарызға алулар тізімі мен пагинация
- */
-const getUserBorrows = async (params = {}) => {
-  try {
-    const response = await api.get('/borrows', { params });
-    return response;
-  } catch (error) {
-    console.error('Пайдаланушы қарызға алуларын алу қатесі:', error);
-    throw error;
-  }
-};
-
-// Экспорттар
 const borrowService = {
-  getAllBorrows,
-  getUserBorrows,
-  getBorrow,
-  borrowBook,
-  returnBook,
-  extendBorrow,
-  updateBorrow,
-  checkOverdueBorrows,
-  getBorrowStats
+  /**
+   * Пайдаланушының қарызға алуларын алу
+   * 
+   * @param {Object} params - Сұраныс параметрлері
+   * @param {number} params.page - Бет нөмірі
+   * @param {number} params.limit - Бір беттегі қарызға алулар саны
+   * @param {string} params.status - Мәртебе бойынша фильтр
+   * @returns {Promise<Object>} Қарызға алулар тізімі
+   */
+  getUserBorrows: async (params = {}) => {
+    return crudService.getAll('/borrows', params);
+  },
+
+  /**
+   * Барлық қарызға алуларды алу (тек әкімші/кітапханашы)
+   * 
+   * @param {Object} params - Сұраныс параметрлері
+   * @returns {Promise<Object>} Қарызға алулар тізімі
+   */
+  getAllBorrows: async (params = {}) => {
+    return crudService.getAll('/borrows/all', params);
+  },
+
+  /**
+   * Қарызға алуды ID бойынша алу
+   * 
+   * @param {string|number} id - Қарызға алу ID-сі
+   * @returns {Promise<Object>} Қарызға алу мәліметтері
+   */
+  getBorrow: async (id) => {
+    return crudService.getById('/borrows', id);
+  },
+
+  /**
+   * Кітапты қарызға алу
+   * 
+   * @param {Object} data - Қарызға алу мәліметтері
+   * @param {string|number} data.bookId - Кітап ID-сі
+   * @returns {Promise<Object>} Жаңа қарызға алу мәліметтері
+   */
+  borrowBook: async (data) => {
+    return crudService.create('/borrows', data);
+  },
+
+  /**
+   * Қарызға алынған кітапты қайтару
+   * 
+   * @param {string|number} id - Қарызға алу ID-сі
+   * @returns {Promise<Object>} Жаңартылған қарызға алу мәліметтері
+   */
+  returnBook: async (id) => {
+    return crudService.executeAction(`/borrows/${id}/return`, {}, 'put');
+  },
+
+  /**
+   * Қарызға алу мерзімін ұзарту
+   * 
+   * @param {string|number} id - Қарызға алу ID-сі
+   * @returns {Promise<Object>} Жаңартылған қарызға алу мәліметтері
+   */
+  extendBorrow: async (id) => {
+    return crudService.executeAction(`/borrows/${id}/extend`, {}, 'put');
+  },
+
+  /**
+   * Қарызға алуды жаңарту (тек әкімші/кітапханашы)
+   * 
+   * @param {string|number} id - Қарызға алу ID-сі
+   * @param {Object} data - Жаңартылған қарызға алу мәліметтері
+   * @returns {Promise<Object>} Жаңартылған қарызға алу мәліметтері
+   */
+  updateBorrow: async (id, data) => {
+    return crudService.update('/borrows', id, data);
+  },
+
+  /**
+   * Мерзімі өткен қарызға алуларды тексеру
+   * 
+   * @returns {Promise<Object>} Мерзімі өткен қарызға алулар мәліметтері
+   */
+  checkOverdueBorrows: async () => {
+    return crudService.executeAction('/borrows/check-overdue', {}, 'get');
+  },
+
+  /**
+   * Қарызға алу статистикасын алу
+   * 
+   * @returns {Promise<Object>} Қарызға алу статистикасы
+   */
+  getBorrowStats: async () => {
+    return crudService.executeAction('/borrows/stats', {}, 'get');
+  }
 };
 
 export default borrowService;

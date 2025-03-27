@@ -1,3 +1,5 @@
+// src/pages/books/BooksForm.js
+
 import React, { useState, useEffect } from 'react';
 import { 
   Box, 
@@ -19,26 +21,31 @@ import {
   Container,
   useTheme,
   useMediaQuery,
-  FormHelperText
+  FormHelperText,
+  Snackbar,
+  SnackbarContent,
+  Backdrop
 } from '@mui/material';
 import { 
   ArrowBack as ArrowBackIcon,
   Save as SaveIcon,
   Upload as UploadIcon,
   Delete as DeleteIcon,
-  Book as BookIcon
+  Book as BookIcon,
+  Close as CloseIcon
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import bookService from '../../services/bookService';
 
-const BookForm = () => {
+const BooksForm = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const { id } = useParams();
   const isEditMode = Boolean(id);
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.down('md'));
 
-  // Состояния
+  // Күй айнымалылары
   const [loading, setLoading] = useState(isEditMode);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -46,8 +53,11 @@ const BookForm = () => {
   const [categories, setCategories] = useState([]);
   const [coverFile, setCoverFile] = useState(null);
   const [coverPreview, setCoverPreview] = useState(null);
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarSeverity, setSnackbarSeverity] = useState('success');
 
-  // Состояние формы
+  // Форма күйі
   const [formData, setFormData] = useState({
     title: '',
     author: '',
@@ -61,7 +71,7 @@ const BookForm = () => {
     cover: 'default-book-cover.jpg'
   });
 
-  // Состояние ошибок валидации
+  // Валидация қателері
   const [formErrors, setFormErrors] = useState({
     title: '',
     author: '',
@@ -73,56 +83,75 @@ const BookForm = () => {
     isbn: ''
   });
 
-  // Языки
+  // Тілдер тізімі
   const languages = [
     { value: 'Қазақ тілі', label: 'Қазақ тілі' },
     { value: 'Орыс тілі', label: 'Орыс тілі' },
     { value: 'Ағылшын тілі', label: 'Ағылшын тілі' }
   ];
 
-  // Загрузка данных книги и категорий
+  // Кітап және категориялар деректерін жүктеу
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
         setError(null);
         
-        // Загрузка категорий
+        // Категорияларды жүктеу
         const categoriesResponse = await bookService.getCategories();
+        console.log('Categories response:', categoriesResponse);
+        
         if (categoriesResponse.success) {
           setCategories(categoriesResponse.data || []);
+        } else {
+          showSnackbar('Категорияларды жүктеу кезінде қате орын алды', 'error');
         }
         
-        // Если режим редактирования, загружаем данные книги
+        // Өңдеу режимінде кітап деректерін жүктеу
         if (isEditMode) {
           const bookResponse = await bookService.getBook(id);
+          console.log('Book response:', bookResponse);
           
           if (bookResponse.success && bookResponse.data) {
             const book = bookResponse.data;
             
+            // Кітап тілін қазақшаға аудару
+            let language = book.language;
+            if (language === 'Казахский') {
+              language = 'Қазақ тілі';
+            } else if (language === 'Русский') {
+              language = 'Орыс тілі';
+            } else if (language === 'Английский') {
+              language = 'Ағылшын тілі';
+            }
+            
+            // Форма деректерін орнату
             setFormData({
               title: book.title || '',
               author: book.author || '',
               categoryId: book.categoryId?.toString() || '',
               description: book.description || '',
               publicationYear: book.publicationYear?.toString() || '',
-              language: book.language || 'Қазақ тілі',
+              language: language,
               totalCopies: book.totalCopies?.toString() || '1',
               availableCopies: book.availableCopies?.toString() || '1',
               isbn: book.isbn || '',
               cover: book.cover || 'default-book-cover.jpg'
             });
             
-            // Если есть обложка, загружаем предпросмотр
+            // Мұқаба бар болса, оны жүктеу
             if (book.cover && book.cover !== 'default-book-cover.jpg') {
               const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
               setCoverPreview(`${apiUrl}/uploads/covers/${book.cover}`);
             }
+          } else {
+            showSnackbar('Кітап деректерін жүктеу кезінде қате орын алды', 'error');
           }
         }
       } catch (err) {
         console.error('Деректерді жүктеу қатесі:', err);
-        setError('Деректерді жүктеу кезінде қате орын алды.');
+        setError('Деректерді жүктеу кезінде қате орын алды');
+        showSnackbar('Деректерді жүктеу кезінде қате орын алды', 'error');
       } finally {
         setLoading(false);
       }
@@ -131,7 +160,19 @@ const BookForm = () => {
     fetchData();
   }, [id, isEditMode]);
 
-  // Обработчик изменения полей формы
+  // Snackbar көрсету функциясы
+  const showSnackbar = (message, severity = 'success') => {
+    setSnackbarMessage(message);
+    setSnackbarSeverity(severity);
+    setSnackbarOpen(true);
+  };
+
+  // Snackbar жабу функциясы
+  const handleSnackbarClose = () => {
+    setSnackbarOpen(false);
+  };
+
+  // Форма өрістерінің өзгеруін өңдеу
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({
@@ -139,7 +180,7 @@ const BookForm = () => {
       [name]: value
     }));
 
-    // Сброс ошибок при вводе
+    // Енгізу кезінде қателерді тазалау
     if (formErrors[name]) {
       setFormErrors(prev => ({
         ...prev,
@@ -147,7 +188,7 @@ const BookForm = () => {
       }));
     }
 
-    // Автоматическое обновление доступных копий при изменении общего количества
+    // Жалпы дана санын өзгерткенде, қол жетімді даналарды автоматты түрде жаңарту
     if (name === 'totalCopies' && !isEditMode) {
       setFormData(prev => ({
         ...prev,
@@ -156,20 +197,21 @@ const BookForm = () => {
     }
   };
 
-  // Обработчик загрузки обложки
+  // Мұқаба жүктеу функциясы
   const handleCoverChange = (e) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       
-      // Проверка размера файла (максимум 5MB)
+      // Файл өлшемін тексеру (максимум 5MB)
       if (file.size > 5 * 1024 * 1024) {
         setError('Файл көлемі 5МБ-дан аспауы керек');
+        showSnackbar('Файл көлемі 5МБ-дан аспауы керек', 'error');
         return;
       }
       
       setCoverFile(file);
       
-      // Создание URL для предпросмотра
+      // Алдын ала қарау URL жасау
       const reader = new FileReader();
       reader.onload = (event) => {
         setCoverPreview(event.target.result);
@@ -178,19 +220,19 @@ const BookForm = () => {
     }
   };
 
-  // Удаление загруженной обложки
+  // Мұқабаны жою функциясы
   const handleRemoveCover = () => {
     setCoverFile(null);
     setCoverPreview(null);
     
-    // В режиме редактирования устанавливаем обложку по умолчанию
+    // Өңдеу режимінде әдепкі мұқабаны орнату
     setFormData(prev => ({
       ...prev,
       cover: 'default-book-cover.jpg'
     }));
   };
 
-  // Валидация формы
+  // Форманы валидациялау
   const validateForm = () => {
     const errors = {};
     let isValid = true;
@@ -258,19 +300,20 @@ const BookForm = () => {
     return isValid;
   };
 
-  // Проверка формата ISBN
+  // ISBN форматын тексеру
   const isValidISBN = (isbn) => {
-    // Простая проверка
+    // Қарапайым тексеру
     const regex = /^(?=(?:\D*\d){10}(?:(?:\D*\d){3})?$)[\d-]+$/;
     return regex.test(isbn);
   };
 
-  // Обработчик отправки формы
+  // Форманы жіберу функциясы
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Валидация формы
+    // Форманы валидациялау
     if (!validateForm()) {
+      showSnackbar('Формада қателер бар, оларды түзетіп, қайталап көріңіз', 'error');
       return;
     }
 
@@ -279,7 +322,7 @@ const BookForm = () => {
     setSuccess(false);
     
     try {
-      // Подготовка данных для API
+      // API үшін деректерді дайындау
       const bookData = {
         ...formData,
         totalCopies: parseInt(formData.totalCopies, 10),
@@ -288,7 +331,7 @@ const BookForm = () => {
         categoryId: formData.categoryId ? parseInt(formData.categoryId, 10) : undefined
       };
       
-      // Преобразование языка в формат API
+      // Тілді API форматына түрлендіру
       if (bookData.language === 'Қазақ тілі') {
         bookData.language = 'Казахский';
       } else if (bookData.language === 'Орыс тілі') {
@@ -297,14 +340,17 @@ const BookForm = () => {
         bookData.language = 'Английский';
       }
       
+      console.log('Submitting book data:', bookData);
       let response;
       
-      // Создание или обновление книги
+      // Кітапты жасау немесе жаңарту
       if (isEditMode) {
         response = await bookService.updateBook(id, bookData);
       } else {
         response = await bookService.createBook(bookData);
       }
+      
+      console.log('Book save response:', response);
       
       if (!response.success) {
         throw new Error(response.message || 'Кітапты сақтау кезінде қате орын алды');
@@ -312,23 +358,30 @@ const BookForm = () => {
       
       const bookId = response.data?.id || id;
       
-      // Если есть новая обложка, загружаем ее
+      // Жаңа мұқаба болса, оны жүктеу
       if (coverFile) {
         const uploadResponse = await bookService.uploadBookCover(bookId, coverFile);
+        console.log('Cover upload response:', uploadResponse);
+        
         if (!uploadResponse.success) {
           console.error('Мұқабаны жүктеу қатесі:', uploadResponse.message);
+          showSnackbar('Кітап сақталды, бірақ мұқабаны жүктеу кезінде қате орын алды', 'warning');
         }
       }
       
+      // Сәтті сақтау хабарламасы
       setSuccess(true);
+      showSnackbar(`Кітап сәтті ${isEditMode ? 'жаңартылды' : 'қосылды'}!`, 'success');
       
-      // Переход на список книг после короткой задержки
+      // Кітаптар тізіміне қайту
       setTimeout(() => {
         navigate('/books');
       }, 1500);
     } catch (err) {
       console.error('Кітапты сақтау қатесі:', err);
       setError(err.message || 'Кітапты сақтау кезінде қате орын алды');
+      showSnackbar('Кітапты сақтау кезінде қате орын алды: ' + 
+        (err.message || 'Белгісіз қате'), 'error');
     } finally {
       setSaving(false);
     }
@@ -336,61 +389,87 @@ const BookForm = () => {
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
-        <CircularProgress />
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        minHeight: '60vh',
+        flexDirection: 'column',
+        gap: 2
+      }}>
+        <CircularProgress size={isMobile ? 40 : 60} />
+        <Typography color="text.secondary">
+          Деректер жүктелуде...
+        </Typography>
       </Box>
     );
   }
 
   return (
-    <Container maxWidth="lg">
-      <Box sx={{ py: 3 }}>
-        {/* Заголовок и кнопка возврата */}
+    <Container maxWidth="xl">
+      <Box sx={{ py: { xs: 2, sm: 3 } }}>
+        {/* Тақырып және кері қайту батырмасы */}
         <Box sx={{ 
           display: 'flex', 
           alignItems: 'center', 
-          mb: 4,
+          mb: { xs: 2, sm: 4 },
           flexDirection: isMobile ? 'column' : 'row',
           alignItems: isMobile ? 'flex-start' : 'center',
-          gap: isMobile ? 2 : 0
+          gap: isMobile ? 1 : 0
         }}>
           <IconButton 
             color="inherit" 
             onClick={() => navigate('/books')}
             sx={{ mr: isMobile ? 0 : 2 }}
+            aria-label="Артқа қайту"
           >
             <ArrowBackIcon />
           </IconButton>
-          <Typography variant={isMobile ? "h6" : "h5"} fontWeight="600">
+          <Typography 
+            variant={isMobile ? "h6" : "h5"} 
+            component="h1"
+            fontWeight="600"
+          >
             {isEditMode ? 'Кітапты өңдеу' : 'Жаңа кітап қосу'}
           </Typography>
         </Box>
 
-        {/* Сообщения об ошибках и успешном сохранении */}
+        {/* Қателер мен сәтті сақтау хабарламалары */}
         {error && (
-          <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
+          <Alert 
+            severity="error" 
+            sx={{ mb: 3 }} 
+            onClose={() => setError(null)}
+            variant="filled"
+          >
             {error}
           </Alert>
         )}
         
         {success && (
-          <Alert severity="success" sx={{ mb: 3 }}>
+          <Alert 
+            severity="success" 
+            sx={{ mb: 3 }}
+            variant="filled"
+          >
             Кітап сәтті {isEditMode ? 'жаңартылды' : 'қосылды'}!
           </Alert>
         )}
 
-        {/* Форма добавления/редактирования книги */}
+        {/* Кітап қосу/өңдеу формасы */}
         <Paper 
-          elevation={3} 
+          elevation={isMobile ? 2 : 3} 
           sx={{ 
             p: { xs: 2, sm: 3 }, 
-            borderRadius: 2,
-            boxShadow: '0 4px 20px rgba(0,0,0,0.05)'
+            borderRadius: { xs: 2, sm: 3 },
+            boxShadow: isMobile 
+              ? '0 2px 10px rgba(0,0,0,0.05)' 
+              : '0 4px 20px rgba(0,0,0,0.05)'
           }}
         >
           <form onSubmit={handleSubmit}>
-            <Grid container spacing={{ xs: 2, md: 3 }}>
-              {/* Левая колонка - основная информация */}
+            <Grid container spacing={{ xs: 2, sm: 3 }}>
+              {/* Сол жақ колонка - негізгі ақпарат */}
               <Grid item xs={12} md={8}>
                 <Grid container spacing={2}>
                   <Grid item xs={12}>
@@ -408,6 +487,7 @@ const BookForm = () => {
                       InputLabelProps={{
                         shrink: true,
                       }}
+                      size={isMobile ? "small" : "medium"}
                     />
                   </Grid>
                   
@@ -426,11 +506,17 @@ const BookForm = () => {
                       InputLabelProps={{
                         shrink: true,
                       }}
+                      size={isMobile ? "small" : "medium"}
                     />
                   </Grid>
                   
                   <Grid item xs={12} sm={6}>
-                    <FormControl fullWidth error={Boolean(formErrors.categoryId)} required>
+                    <FormControl 
+                      fullWidth 
+                      error={Boolean(formErrors.categoryId)} 
+                      required
+                      size={isMobile ? "small" : "medium"}
+                    >
                       <InputLabel id="category-label">Категория</InputLabel>
                       <Select
                         labelId="category-label"
@@ -460,7 +546,7 @@ const BookForm = () => {
                       value={formData.description}
                       onChange={handleChange}
                       multiline
-                      rows={4}
+                      rows={isMobile ? 3 : 4}
                       error={Boolean(formErrors.description)}
                       helperText={formErrors.description}
                       required
@@ -469,6 +555,7 @@ const BookForm = () => {
                       InputLabelProps={{
                         shrink: true,
                       }}
+                      size={isMobile ? "small" : "medium"}
                     />
                   </Grid>
                   
@@ -489,11 +576,17 @@ const BookForm = () => {
                       InputLabelProps={{
                         shrink: true,
                       }}
+                      size={isMobile ? "small" : "medium"}
                     />
                   </Grid>
                   
                   <Grid item xs={12} sm={6}>
-                    <FormControl fullWidth error={Boolean(formErrors.language)} required>
+                    <FormControl 
+                      fullWidth 
+                      error={Boolean(formErrors.language)} 
+                      required
+                      size={isMobile ? "small" : "medium"}
+                    >
                       <InputLabel id="language-label">Тіл</InputLabel>
                       <Select
                         labelId="language-label"
@@ -531,6 +624,7 @@ const BookForm = () => {
                       InputLabelProps={{
                         shrink: true,
                       }}
+                      size={isMobile ? "small" : "medium"}
                     />
                   </Grid>
                   
@@ -552,6 +646,7 @@ const BookForm = () => {
                       InputLabelProps={{
                         shrink: true,
                       }}
+                      size={isMobile ? "small" : "medium"}
                     />
                   </Grid>
                   
@@ -569,12 +664,13 @@ const BookForm = () => {
                       InputLabelProps={{
                         shrink: true,
                       }}
+                      size={isMobile ? "small" : "medium"}
                     />
                   </Grid>
                 </Grid>
               </Grid>
               
-              {/* Правая колонка - загрузка обложки */}
+              {/* Оң жақ колонка - мұқаба жүктеу */}
               <Grid item xs={12} md={4}>
                 <Typography variant="subtitle1" fontWeight="500" gutterBottom>
                   Кітап мұқабасы
@@ -583,7 +679,7 @@ const BookForm = () => {
                 <Card
                   sx={{
                     width: '100%',
-                    height: isMobile ? 200 : 300,
+                    height: { xs: 200, sm: 250, md: 300 },
                     display: 'flex',
                     flexDirection: 'column',
                     justifyContent: 'center',
@@ -623,6 +719,7 @@ const BookForm = () => {
                           }
                         }}
                         onClick={handleRemoveCover}
+                        aria-label="Мұқабаны жою"
                       >
                         <DeleteIcon fontSize="small" />
                       </IconButton>
@@ -659,6 +756,7 @@ const BookForm = () => {
                     textTransform: 'none',
                     fontWeight: 500
                   }}
+                  size={isMobile ? "small" : "medium"}
                 >
                   Мұқаба жүктеу
                   <input
@@ -670,13 +768,13 @@ const BookForm = () => {
                 </Button>
               </Grid>
               
-              {/* Нижняя панель с кнопками */}
+              {/* Төменгі панель - батырмалар */}
               <Grid item xs={12}>
                 <Divider sx={{ my: 2 }} />
                 <Box sx={{ 
                   display: 'flex', 
                   justifyContent: 'space-between',
-                  flexDirection: isMobile ? 'column' : 'row',
+                  flexDirection: isMobile ? 'column-reverse' : 'row',
                   gap: 2
                 }}>
                   <Button 
@@ -687,27 +785,27 @@ const BookForm = () => {
                       py: 1.5,
                       borderRadius: 1,
                       textTransform: 'none',
-                      fontWeight: 500,
-                      order: isMobile ? 2 : 1
+                      fontWeight: 500
                     }}
                     fullWidth={isMobile}
+                    size={isMobile ? "large" : "medium"}
                   >
                     Бас тарту
                   </Button>
                   <Button 
                     type="submit" 
                     variant="contained" 
-                    startIcon={saving ? <CircularProgress size={20} /> : <SaveIcon />}
+                    startIcon={saving ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
                     disabled={saving}
                     sx={{ 
                       py: 1.5,
                       borderRadius: 1,
                       textTransform: 'none',
                       fontWeight: 500,
-                      boxShadow: 2,
-                      order: isMobile ? 1 : 2
+                      boxShadow: 2
                     }}
                     fullWidth={isMobile}
+                    size={isMobile ? "large" : "medium"}
                   >
                     {saving ? 'Сақталуда...' : 'Сақтау'}
                   </Button>
@@ -717,8 +815,57 @@ const BookForm = () => {
           </form>
         </Paper>
       </Box>
+      
+      {/* Snackbar хабарламасы */}
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={6000}
+        onClose={handleSnackbarClose}
+        anchorOrigin={{ 
+          vertical: 'bottom', 
+          horizontal: 'center' 
+        }}
+      >
+        <SnackbarContent
+          sx={{
+            backgroundColor: snackbarSeverity === 'success' 
+              ? theme.palette.success.main 
+              : snackbarSeverity === 'error'
+                ? theme.palette.error.main
+                : theme.palette.warning.main,
+          }}
+          message={snackbarMessage}
+          action={
+            <IconButton
+              size="small"
+              color="inherit"
+              onClick={handleSnackbarClose}
+            >
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          }
+        />
+      </Snackbar>
+      
+      {/* Ауыр есептеу кезінде жүктеу экраны */}
+      <Backdrop
+        sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 1 }}
+        open={saving}
+      >
+        <Box sx={{ 
+          display: 'flex', 
+          flexDirection: 'column', 
+          alignItems: 'center',
+          gap: 2
+        }}>
+          <CircularProgress color="inherit" />
+          <Typography variant="body1" color="inherit">
+            Кітап сақталуда...
+          </Typography>
+        </Box>
+      </Backdrop>
     </Container>
   );
 };
 
-export default BookForm;
+export default BooksForm;

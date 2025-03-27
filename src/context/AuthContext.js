@@ -1,25 +1,27 @@
+// src/context/AuthContext.js
 import React, { createContext, useState, useEffect, useCallback } from 'react';
 import authService from '../services/authService';
 
 /**
  * Аутентификация контексті
  * 
- * @description Бұл контекст жүйедегі пайдаланушының аутентификация күйін
- * және рөлін басқарады. Бұл компоненттерге пайдаланушының кіру/шығу күйі 
- * мен рұқсаттарын тексеруге мүмкіндік береді.
+ * @description Бұл контекст пайдаланушының аутентификация күйін және
+ * рөлін басқарады. Компоненттер осы контекстті пайдалану арқылы
+ * пайдаланушының кіру/шығу күйі мен рұқсаттарын тексере алады.
  */
+
 // Контекст жасау
 export const AuthContext = createContext();
 
 /**
  * Аутентификация контекст провайдері
  * 
- * @param {object} props - Компонент props-тары
+ * @param {Object} props - Компонент параметрлері
  * @param {React.ReactNode} props.children - Балалар компоненттер
  * @returns {JSX.Element} - Провайдер компоненті
  */
 export const AuthProvider = ({ children }) => {
-  // Пайдаланушының аутентификацияланғанын білдіретін күй
+  // Пайдаланушының аутентификацияланған күйі
   const [isAuthenticated, setIsAuthenticated] = useState(
     authService.isAuthenticated()
   );
@@ -27,38 +29,51 @@ export const AuthProvider = ({ children }) => {
   // Ағымдағы пайдаланушы туралы мәліметтер
   const [currentUser, setCurrentUser] = useState(null);
   
-  // Жүктелу күйі
+  // Жүктеу күйі
   const [loading, setLoading] = useState(true);
+  
+  // Контекст қатесі
+  const [error, setError] = useState(null);
 
   /**
    * Пайдаланушының аутентификация күйін тексеру
-   * Используем useCallback для предотвращения бесконечных перерендеров
    */
   const checkAuthStatus = useCallback(() => {
     setLoading(true);
+    setError(null);
     
-    // Try to refresh auth state (fix role if missing)
-    authService.refreshAuthState();
-    
-    const authenticated = authService.isAuthenticated();
-    const user = authService.getCurrentUser();
-    
-    console.log('Auth status check - authenticated:', authenticated);
-    console.log('Auth status check - user:', user);
-    
-    // Log specifics about user role
-    if (user) {
-      console.log('User role from auth check:', user.role);
-    } else {
-      console.warn('No user data available in auth check');
+    try {
+      // Аутентификация күйін жаңарту
+      authService.refreshAuthState();
+      
+      const authenticated = authService.isAuthenticated();
+      const user = authService.getCurrentUser();
+      
+      console.log('Аутентификация күйі тексерілді - аутентификацияланған:', authenticated);
+      console.log('Аутентификация күйі тексерілді - пайдаланушы:', user);
+      
+      // Пайдаланушы рөлін тексеру
+      if (user) {
+        console.log('Пайдаланушы рөлі:', user.role);
+      } else {
+        console.warn('Аутентификация тексеруінде пайдаланушы мәліметтері жоқ');
+      }
+      
+      setIsAuthenticated(authenticated);
+      setCurrentUser(user);
+    } catch (err) {
+      console.error('Аутентификация күйін тексеру қатесі:', err);
+      setError('Аутентификация күйін тексеру қатесі');
+      
+      // Қате болған жағдайда мәліметтерді тазалау
+      setIsAuthenticated(false);
+      setCurrentUser(null);
+    } finally {
+      setLoading(false);
     }
-    
-    setIsAuthenticated(authenticated);
-    setCurrentUser(user);
-    setLoading(false);
   }, []);
 
-  // Инициализация (компонент жүктелген кезде)
+  // Компонент жүктелген кезде инициализация
   useEffect(() => {
     checkAuthStatus();
   }, [checkAuthStatus]);
@@ -66,15 +81,21 @@ export const AuthProvider = ({ children }) => {
   /**
    * Жүйеге кіру
    * 
-   * @param {string} email - Пайдаланушы email-і
-   * @param {string} password - Құпия сөз
-   * @returns {Promise<object>} - Пайдаланушы мәліметтері
+   * @param {Object} credentials - Кіру мәліметтері
+   * @param {string} credentials.email - Пайдаланушы email-і
+   * @param {string} credentials.password - Құпия сөз
+   * @returns {Promise<Object>} - Пайдаланушы мәліметтері
    */
-  const login = async (email, password) => {
+  const login = async (credentials) => {
     try {
+      setLoading(true);
+      setError(null);
+      
+      const { email, password } = credentials;
+      
       const user = await authService.login(email, password);
       
-      // Ensure user has a role
+      // Пайдаланушы рөлінің бар екенін тексеру
       if (user && !user.role) {
         if (email === 'admin@narxoz.kz') {
           user.role = 'admin';
@@ -86,10 +107,14 @@ export const AuthProvider = ({ children }) => {
       
       setIsAuthenticated(true);
       setCurrentUser(user);
+      
       return user;
-    } catch (error) {
-      console.error('Login error from context:', error);
-      throw error;
+    } catch (err) {
+      console.error('Кіру қатесі:', err);
+      setError(err.message || 'Жүйеге кіру кезінде қате орын алды');
+      throw err;
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -97,20 +122,29 @@ export const AuthProvider = ({ children }) => {
    * Жүйеден шығу
    */
   const logout = () => {
-    authService.logout();
-    setIsAuthenticated(false);
-    setCurrentUser(null);
+    setLoading(true);
+    
+    try {
+      authService.logout();
+      setIsAuthenticated(false);
+      setCurrentUser(null);
+    } catch (err) {
+      console.error('Шығу қатесі:', err);
+      setError('Жүйеден шығу кезінде қате орын алды');
+    } finally {
+      setLoading(false);
+    }
   };
 
   /**
-   * Пайдаланушы рөлінің рұқсат етілген рөлдер тізімінде бар-жоғын тексеру
+   * Пайдаланушының белгілі бір рөл(дер)ге ие екенін тексеру
    * 
-   * @param {Array<string>} roles - Рұқсат етілген рөлдер тізімі
-   * @returns {boolean} - Рұқсат бар-жоғы
+   * @param {Array<string>|string} roles - Рұқсат етілген рөл(дер)
+   * @returns {boolean} - Пайдаланушының рөлі бар-жоғы
    */
   const hasRole = (roles) => {
-    if (!currentUser || !roles || roles.length === 0) {
-      console.warn('hasRole check failed - missing data', { 
+    if (!currentUser || !roles) {
+      console.warn('hasRole тексеруі сәтсіз - мәліметтер жетіспейді', { 
         hasCurrentUser: !!currentUser, 
         userRole: currentUser?.role,
         roles 
@@ -118,24 +152,29 @@ export const AuthProvider = ({ children }) => {
       return false;
     }
     
-    // Special case for admin@narxoz.kz
-    if (currentUser.email === 'admin@narxoz.kz' && roles.includes('admin')) {
+    // Рөлдер жалғыз жол ретінде берілген болса, массивке айналдыру
+    const rolesToCheck = Array.isArray(roles) ? roles : [roles];
+    
+    // admin@narxoz.kz үшін арнайы жағдай
+    if (currentUser.email === 'admin@narxoz.kz' && rolesToCheck.includes('admin')) {
       return true;
     }
     
-    const hasMatchingRole = roles.includes(currentUser.role);
-    console.log(`Role check: user has role ${currentUser.role}, checking against ${roles.join(', ')} = ${hasMatchingRole}`);
+    // Пайдаланушы рөлі берілген рөлдер тізімінде бар ма
+    const hasMatchingRole = rolesToCheck.includes(currentUser.role);
+    console.log(`Рөл тексеруі: пайдаланушы рөлі ${currentUser.role}, тексерілетін рөлдер ${rolesToCheck.join(', ')} = ${hasMatchingRole}`);
+    
     return hasMatchingRole;
   };
 
   /**
    * Ағымдағы пайдаланушы мәліметтерін жаңарту
    * 
-   * @param {object} userData - Жаңа пайдаланушы мәліметтері
+   * @param {Object} userData - Жаңа пайдаланушы мәліметтері
    */
   const updateCurrentUser = (userData) => {
     if (userData) {
-      // Ensure role exists
+      // Рөлдің бар екенін тексеру
       if (!userData.role) {
         if (userData.email === 'admin@narxoz.kz') {
           userData.role = 'admin';
@@ -144,6 +183,7 @@ export const AuthProvider = ({ children }) => {
         }
       }
       
+      // Жаңа мәліметтерді сақтау
       authService.updateUserData(userData);
       setCurrentUser(userData);
     }
@@ -152,6 +192,7 @@ export const AuthProvider = ({ children }) => {
   // Контекст мәндері
   const authContextValue = {
     loading,
+    error,
     isAuthenticated,
     currentUser,
     login,
@@ -166,6 +207,22 @@ export const AuthProvider = ({ children }) => {
       {children}
     </AuthContext.Provider>
   );
+};
+
+/**
+ * Аутентификация хукі
+ * 
+ * @description Бұл хук AuthContext-ке оңай қол жеткізуге мүмкіндік береді
+ * @returns {Object} AuthContext мәндері
+ */
+export const useAuth = () => {
+  const context = React.useContext(AuthContext);
+  
+  if (!context) {
+    throw new Error('useAuth хукі AuthProvider ішінде пайдаланылуы керек');
+  }
+  
+  return context;
 };
 
 export default AuthContext;
