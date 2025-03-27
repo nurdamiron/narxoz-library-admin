@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Box, 
   Card, 
@@ -10,37 +10,76 @@ import {
   InputAdornment,
   IconButton,
   Alert,
+  CircularProgress,
   useTheme
 } from '@mui/material';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import useAuth from '../hooks/useAuth';
 
+/**
+ * Кіру беті компоненті
+ * 
+ * @description Бұл компонент пайдаланушының жүйеге кіру интерфейсін қамтамасыз етеді.
+ * Пайдаланушы кіру үшін email және құпия сөзін енгізуі қажет.
+ */
 const Login = () => {
   const theme = useTheme();
   const navigate = useNavigate();
-  const [username, setUsername] = useState('');
+  const { login, isAuthenticated } = useAuth();
+  
+  // Күй айнымалылары
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // В реальном приложении здесь будет запрос к API для проверки учетных данных
-  const handleLogin = (e) => {
+  // Если пользователь уже аутентифицирован, перенаправляем на главную страницу
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/');
+    }
+  }, [isAuthenticated, navigate]);
+
+  /**
+   * Кіру формасын өңдеу
+   * 
+   * @param {Event} e - Форма оқиғасы
+   */
+  const handleLogin = async (e) => {
     e.preventDefault();
+    
+    if (!email || !password) {
+      setError('Email және құпия сөз енгізіңіз');
+      return;
+    }
+    
     setLoading(true);
     setError('');
 
-    // Имитация проверки учетных данных
-    setTimeout(() => {
-      // Для демонстрации используем простую проверку
-      if (username === 'admin' && password === 'admin123') {
-        localStorage.setItem('isAuthenticated', 'true');
-        navigate('/');
+    try {
+      // AuthContext арқылы кіру
+      await login(email, password);
+      navigate('/');
+    } catch (error) {
+      console.error('Login error:', error);
+      
+      // Қате жағдайында тиісті хабарламаны көрсету
+      if (error.response) {
+        if (error.response.status === 401) {
+          setError('Қате email немесе құпия сөз');
+        } else {
+          setError(`Серверге қосылу кезінде қате орын алды: ${error.response.status}`);
+        }
+      } else if (error.request) {
+        setError('Серверден жауап алу мүмкін болмады. Желі байланысын тексеріңіз.');
       } else {
-        setError('Қате пайдаланушы аты немесе құпия сөз');
+        setError(`Қате орын алды: ${error.message}`);
       }
+    } finally {
       setLoading(false);
-    }, 1000);
+    }
   };
 
   return (
@@ -91,13 +130,13 @@ const Login = () => {
                 margin="normal"
                 required
                 fullWidth
-                id="username"
-                label="Пайдаланушы аты"
-                name="username"
-                autoComplete="username"
+                id="email"
+                label="Email"
+                name="email"
+                autoComplete="email"
                 autoFocus
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
               />
               <TextField
                 margin="normal"
@@ -131,7 +170,11 @@ const Login = () => {
                 sx={{ mt: 3, mb: 2, py: 1.5 }}
                 disabled={loading}
               >
-                {loading ? 'Кіру...' : 'Кіру'}
+                {loading ? (
+                  <CircularProgress size={24} color="inherit" />
+                ) : (
+                  'Кіру'
+                )}
               </Button>
             </Box>
           </CardContent>

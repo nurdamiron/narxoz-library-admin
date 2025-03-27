@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useNavigate } from 'react-router-dom';
 import { 
   Box, 
   AppBar, 
@@ -15,7 +15,9 @@ import {
   IconButton, 
   useMediaQuery, 
   useTheme, 
-  Avatar 
+  Avatar, 
+  Menu,
+  MenuItem
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -25,13 +27,24 @@ import {
   People as UserIcon,
   Category as CategoryIcon,
   Logout as LogoutIcon,
+  AccountCircle as AccountCircleIcon,
+  Settings as SettingsIcon
 } from '@mui/icons-material';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
+import useAuth from '../../hooks/useAuth';
 
-// Ширина боковой панели
+/**
+ * Қосымшаның негізгі лейаут компоненті
+ * 
+ * @description Бұл компонент қосымша интерфейсінің негізгі құрылымын анықтайды,
+ * оның ішінде аппбар, навигациялық сайдбар және басты мазмұн. Ол барлық қорғалған 
+ * беттер үшін қолданылады.
+ */
+
+// Сайдбар ені
 const drawerWidth = 260;
 
-// Элементы навигации
+// Навигация элементтері
 const menuItems = [
   { title: 'Басты бет', path: '/', icon: <DashboardIcon /> },
   { title: 'Кітаптар', path: '/books', icon: <BookIcon /> },
@@ -44,21 +57,61 @@ const Layout = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
+  const { currentUser, logout } = useAuth();
+  
+  // Медиа сұраныстар
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  
+  // Күй айнымалылары
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [userMenuAnchor, setUserMenuAnchor] = useState(null);
 
-  // Обработчик переключения мобильного меню
+  /**
+   * Мобильді мәзірді ашу/жабу
+   */
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
   };
 
-  // Обработчик выхода из системы
+  /**
+   * Пайдаланушы мәзірін ашу
+   * @param {Event} event - Тінтуір оқиғасы
+   */
+  const handleUserMenuOpen = (event) => {
+    setUserMenuAnchor(event.currentTarget);
+  };
+
+  /**
+   * Пайдаланушы мәзірін жабу
+   */
+  const handleUserMenuClose = () => {
+    setUserMenuAnchor(null);
+  };
+
+  /**
+   * Жүйеден шығу
+   */
   const handleLogout = () => {
-    localStorage.removeItem('isAuthenticated');
+    logout();
     navigate('/login');
   };
 
-  // Содержимое боковой панели
+  /**
+   * Пайдаланушы инициалдарын алу
+   * @param {string} name - Пайдаланушы аты
+   * @returns {string} - Инициалдар
+   */
+  const getInitials = (name) => {
+    if (!name) return 'U';
+    return name
+      .split(' ')
+      .map(part => part[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
+  // Сайдбар мазмұны
   const drawer = (
     <Box sx={{ overflow: 'auto' }}>
       <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -114,7 +167,7 @@ const Layout = () => {
 
   return (
     <Box sx={{ display: 'flex' }}>
-      {/* Верхняя панель */}
+      {/* Жоғарғы панель */}
       <AppBar position="fixed" sx={{ 
         zIndex: (theme) => theme.zIndex.drawer + 1,
         backgroundColor: 'white',
@@ -132,15 +185,66 @@ const Layout = () => {
           </IconButton>
           <Box sx={{ flexGrow: 1 }} />
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <Avatar sx={{ bgcolor: theme.palette.primary.main, width: 32, height: 32 }}>A</Avatar>
+            <IconButton
+              onClick={handleUserMenuOpen}
+              color="inherit"
+              edge="end"
+            >
+              {currentUser?.avatar ? (
+                <Avatar 
+                  src={currentUser.avatar} 
+                  alt={currentUser.name}
+                  sx={{ width: 32, height: 32 }}
+                />
+              ) : (
+                <Avatar sx={{ bgcolor: theme.palette.primary.main, width: 32, height: 32 }}>
+                  {currentUser ? getInitials(currentUser.name) : 'U'}
+                </Avatar>
+              )}
+            </IconButton>
             <Typography variant="body1" sx={{ ml: 1, display: { xs: 'none', sm: 'block' } }}>
-              Әкімші
+              {currentUser?.name || 'Пайдаланушы'}
             </Typography>
           </Box>
+          
+          {/* Пайдаланушы мәзірі */}
+          <Menu
+            anchorEl={userMenuAnchor}
+            open={Boolean(userMenuAnchor)}
+            onClose={handleUserMenuClose}
+            transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+            anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+          >
+            <MenuItem onClick={() => {
+              handleUserMenuClose();
+              navigate('/profile');
+            }}>
+              <ListItemIcon>
+                <AccountCircleIcon fontSize="small" />
+              </ListItemIcon>
+              Менің профилім
+            </MenuItem>
+            <MenuItem onClick={() => {
+              handleUserMenuClose();
+              navigate('/settings');
+            }}>
+              <ListItemIcon>
+                <SettingsIcon fontSize="small" />
+              </ListItemIcon>
+              Параметрлер
+            </MenuItem>
+            <Divider />
+            <MenuItem onClick={handleLogout}>
+              <ListItemIcon>
+                <LogoutIcon fontSize="small" />
+              </ListItemIcon>
+              Шығу
+            </MenuItem>
+          </Menu>
         </Toolbar>
       </AppBar>
 
-      {/* Боковая панель - мобильная версия */}
+      {/* Мобильді сайдбар */}
       <Drawer
         variant="temporary"
         open={mobileOpen}
@@ -156,7 +260,7 @@ const Layout = () => {
         {drawer}
       </Drawer>
 
-      {/* Боковая панель - десктопная версия */}
+      {/* Десктоп сайдбар */}
       <Drawer
         variant="permanent"
         sx={{
@@ -168,7 +272,7 @@ const Layout = () => {
         {drawer}
       </Drawer>
 
-      {/* Основное содержимое */}
+      {/* Негізгі мазмұн */}
       <Box component="main" sx={{ 
         flexGrow: 1, 
         p: 3, 
