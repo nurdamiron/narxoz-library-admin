@@ -1,7 +1,8 @@
-import React from 'react';
-import { Navigate } from 'react-router-dom';
-import authService from '../../services/authService';
+import React, { useEffect } from 'react';
+import { Navigate, useLocation } from 'react-router-dom';
 import PropTypes from 'prop-types';
+import useAuth from '../../hooks/useAuth';
+import { CircularProgress, Box } from '@mui/material';
 
 /**
  * Қорғалған маршрут компоненті
@@ -16,26 +17,38 @@ import PropTypes from 'prop-types';
  * @returns {JSX.Element} Қорғалған контент немесе логин бетіне бағыттау
  */
 const ProtectedRoute = ({ children, allowedRoles }) => {
-  // Пайдаланушы аутентификацияланғанын тексеру
-  const isAuthenticated = authService.isAuthenticated();
-  
-  if (!isAuthenticated) {
-    // Егер пайдаланушы аутентификацияланбаған болса, оны логин бетіне бағыттау
-    return <Navigate to="/login" replace />;
+  const { isAuthenticated, currentUser, loading, checkAuthStatus } = useAuth();
+  const location = useLocation();
+
+  // При монтировании компонента проверяем актуальность аутентификации
+  useEffect(() => {
+    checkAuthStatus();
+  }, [checkAuthStatus]);
+
+  // Пока проверяем аутентификацию, показываем спиннер
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <CircularProgress />
+      </Box>
+    );
   }
   
-  // Егер рөлдер көрсетілген болса, тексеру қажет
+  // Если пользователь не аутентифицирован, перенаправляем на страницу входа
+  if (!isAuthenticated) {
+    // Сохраняем текущий путь для возврата после входа
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+  
+  // Если указаны разрешенные роли, проверяем роль пользователя
   if (allowedRoles && allowedRoles.length > 0) {
-    const currentUser = authService.getCurrentUser();
-    
-    // Пайдаланушы рөлінің рұқсат етілген рөлдер тізімінде болуын тексеру
     if (!currentUser || !allowedRoles.includes(currentUser.role)) {
-      // Рөл сәйкес келмесе, басты бетке бағыттау
+      // Если роль не соответствует, перенаправляем на главную страницу
       return <Navigate to="/" replace />;
     }
   }
   
-  // Барлық тексерулер өтті, қорғалған мазмұнды көрсету
+  // Проверки пройдены, отображаем защищенный контент
   return children;
 };
 

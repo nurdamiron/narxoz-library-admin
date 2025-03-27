@@ -23,7 +23,8 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
-  CircularProgress
+  CircularProgress,
+  Alert
 } from '@mui/material';
 import { 
   Add as AddIcon, 
@@ -34,9 +35,12 @@ import {
   FilterList as FilterListIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import bookService from '../../services/bookService';
 
 const BooksList = () => {
   const navigate = useNavigate();
+  
+  // Состояния
   const [loading, setLoading] = useState(true);
   const [books, setBooks] = useState([]);
   const [page, setPage] = useState(0);
@@ -47,49 +51,45 @@ const BooksList = () => {
   const [selectedBookId, setSelectedBookId] = useState(null);
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [error, setError] = useState(null);
+  
+  // Функция загрузки книг с сервера
+  const fetchBooks = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Подготовка параметров запроса
+      const params = {
+        page: page + 1, // Серверная пагинация может начинаться с 1
+        limit: rowsPerPage
+      };
+      
+      // Добавляем поисковый запрос, если он есть
+      if (search) {
+        params.search = search;
+      }
+      
+      const response = await bookService.getBooks(params);
+      
+      if (response.success) {
+        setBooks(response.data || []);
+        setTotalBooks(response.total || 0);
+      } else {
+        setError(response.message || 'Не удалось загрузить список книг');
+      }
+    } catch (err) {
+      console.error('Ошибка при загрузке книг:', err);
+      setError('Произошла ошибка при загрузке книг. Пожалуйста, попробуйте позже.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  // Загрузка данных с сервера
+  // Загрузка данных при изменении параметров (страница, количество на странице, поиск)
   useEffect(() => {
     fetchBooks();
   }, [page, rowsPerPage, search]);
-
-  // Имитация загрузки книг с сервера
-  const fetchBooks = () => {
-    setLoading(true);
-    // В реальном приложении здесь будет запрос к API
-    setTimeout(() => {
-      const dummyBooks = [
-        { id: 1, title: 'Қазақ әдебиетінің тарихы', author: 'Мұхтар Әуезов', category: 'Әдебиет', year: 2018, language: 'Казахский', available: 5, total: 10 },
-        { id: 2, title: 'Экономика негіздері', author: 'Нұрлан Оспанов', category: 'Экономика', year: 2020, language: 'Казахский', available: 3, total: 8 },
-        { id: 3, title: 'Математикалық талдау', author: 'Асқар Жұмаділов', category: 'Математика', year: 2019, language: 'Казахский', available: 0, total: 5 },
-        { id: 4, title: 'Қаржы менеджменті', author: 'Айнұр Қасымова', category: 'Қаржы', year: 2021, language: 'Казахский', available: 7, total: 7 },
-        { id: 5, title: 'Статистика', author: 'Бауыржан Әлиев', category: 'Экономика', year: 2017, language: 'Казахский', available: 2, total: 6 },
-        { id: 6, title: 'Маркетинг негіздері', author: 'Сәуле Тұрсынова', category: 'Маркетинг', year: 2022, language: 'Казахский', available: 4, total: 12 },
-        { id: 7, title: 'Програмалау негіздері', author: 'Дастан Рахимов', category: 'Информатика', year: 2020, language: 'Казахский', available: 1, total: 3 },
-        { id: 8, title: 'Бухгалтерлік есеп', author: 'Гүлнәр Серікова', category: 'Бухгалтерия', year: 2019, language: 'Казахский', available: 5, total: 9 },
-        { id: 9, title: 'Менеджмент', author: 'Асхат Нұрланов', category: 'Менеджмент', year: 2021, language: 'Казахский', available: 6, total: 8 },
-        { id: 10, title: 'Кәсіпкерлік негіздері', author: 'Мақсат Жексенбаев', category: 'Бизнес', year: 2018, language: 'Казахский', available: 0, total: 4 },
-        { id: 11, title: 'Халықаралық қатынастар', author: 'Жанар Сәрсенова', category: 'Саясаттану', year: 2020, language: 'Казахский', available: 3, total: 7 },
-        { id: 12, title: 'Физика курсы', author: 'Қайрат Әбілов', category: 'Физика', year: 2019, language: 'Казахский', available: 4, total: 6 }
-      ];
-      
-      const filteredBooks = search 
-        ? dummyBooks.filter(book => 
-            book.title.toLowerCase().includes(search.toLowerCase()) || 
-            book.author.toLowerCase().includes(search.toLowerCase())
-          ) 
-        : dummyBooks;
-        
-      const paginatedBooks = filteredBooks.slice(
-        page * rowsPerPage, 
-        page * rowsPerPage + rowsPerPage
-      );
-      
-      setBooks(paginatedBooks);
-      setTotalBooks(filteredBooks.length);
-      setLoading(false);
-    }, 1000);
-  };
 
   // Обработчики пагинации
   const handleChangePage = (event, newPage) => {
@@ -104,44 +104,50 @@ const BooksList = () => {
   // Обработчик изменения поиска
   const handleSearchChange = (e) => {
     setSearch(e.target.value);
-    setPage(0);
+    setPage(0); // Сбрасываем на первую страницу при изменении поиска
   };
 
-  // Открытие меню действий
+  // Обработка действий над книгами
   const handleMenuOpen = (event, bookId) => {
     setAnchorEl(event.currentTarget);
     setSelectedBookId(bookId);
   };
 
-  // Закрытие меню действий
   const handleMenuClose = () => {
     setAnchorEl(null);
   };
 
-  // Открытие диалога подтверждения удаления
   const handleDeleteClick = () => {
     handleMenuClose();
     setOpenDeleteDialog(true);
   };
 
-  // Закрытие диалога подтверждения удаления
   const handleDeleteDialogClose = () => {
     setOpenDeleteDialog(false);
   };
 
   // Подтверждение удаления книги
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     setDeleteLoading(true);
-    // В реальном приложении здесь будет запрос к API
-    setTimeout(() => {
-      setBooks(books.filter(book => book.id !== selectedBookId));
-      setTotalBooks(totalBooks - 1);
+    try {
+      const response = await bookService.deleteBook(selectedBookId);
+      
+      if (response.success) {
+        // Перезагружаем список книг после успешного удаления
+        await fetchBooks();
+      } else {
+        setError(response.message || 'Ошибка при удалении книги');
+      }
+    } catch (err) {
+      console.error('Ошибка при удалении книги:', err);
+      setError('Произошла ошибка при удалении книги');
+    } finally {
       setDeleteLoading(false);
       setOpenDeleteDialog(false);
-    }, 1000);
+    }
   };
 
-  // Редактирование книги
+  // Переход к редактированию книги
   const handleEditClick = () => {
     handleMenuClose();
     navigate(`/books/edit/${selectedBookId}`);
@@ -162,6 +168,13 @@ const BooksList = () => {
           Кітап қосу
         </Button>
       </Box>
+
+      {/* Сообщение об ошибке */}
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
 
       {/* Панель поиска и фильтров */}
       <Paper sx={{ p: 2, mb: 3 }}>
@@ -224,14 +237,18 @@ const BooksList = () => {
                   <TableRow key={book.id} hover>
                     <TableCell>{book.title}</TableCell>
                     <TableCell>{book.author}</TableCell>
-                    <TableCell>{book.category}</TableCell>
-                    <TableCell>{book.year}</TableCell>
-                    <TableCell>{book.language}</TableCell>
-                    <TableCell>{`${book.available} / ${book.total}`}</TableCell>
+                    <TableCell>{book.category?.name || ''}</TableCell>
+                    <TableCell>{book.publicationYear}</TableCell>
+                    <TableCell>
+                      {book.language === 'Казахский' ? 'Қазақ тілі' : 
+                       book.language === 'Русский' ? 'Орыс тілі' : 
+                       book.language === 'Английский' ? 'Ағылшын тілі' : book.language}
+                    </TableCell>
+                    <TableCell>{`${book.availableCopies} / ${book.totalCopies}`}</TableCell>
                     <TableCell>
                       <Chip 
-                        label={book.available > 0 ? "Қол жетімді" : "Қол жетімді емес"} 
-                        color={book.available > 0 ? "success" : "error"} 
+                        label={book.availableCopies > 0 ? "Қол жетімді" : "Қол жетімді емес"} 
+                        color={book.availableCopies > 0 ? "success" : "error"} 
                         size="small"
                         variant="outlined"
                       />

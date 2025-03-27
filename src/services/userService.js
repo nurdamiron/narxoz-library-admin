@@ -10,16 +10,28 @@ import api from './api';
  * 
  * @param {Object} params - Сұраныс параметрлері
  * @param {number} [params.page=1] - Бет нөмірі
- * @param {number} [params.limit=10] - Бір беттегі пайдаланушылар саны
+ * @param {number} [params.limit=25] - Бір беттегі пайдаланушылар саны
  * @param {string} [params.search] - Іздеу сұранысы
  * @param {string} [params.role] - Пайдаланушы рөлі бойынша сүзу
  * @returns {Promise<Object>} - Пайдаланушылар тізімі мен пагинация
  */
 const getUsers = async (params = {}) => {
   try {
-    const response = await api.get('/users', params);
+    console.log('Calling getUsers with params:', params);
+    // Сначала проверяем доступен ли наш токен
+    // if (!api.getAuthHeader || !api.getAuthHeader()) {
+    //   console.error('No authentication token available');
+    //   throw new Error('Аутентификация қажет');
+    // }
+
+    const response = await api.get('/users', { params });
     return response;
   } catch (error) {
+    console.error('Пайдаланушыларды алу қатесі:', error);
+    // Добавляем больше информации об ошибке
+    if (error.response) {
+      console.error('Error response:', error.response.status, error.response.data);
+    }
     throw error;
   }
 };
@@ -35,6 +47,7 @@ const getUser = async (id) => {
     const response = await api.get(`/users/${id}`);
     return response;
   } catch (error) {
+    console.error(`Пайдаланушыны алу қатесі (ID: ${id}):`, error);
     throw error;
   }
 };
@@ -49,6 +62,7 @@ const getCurrentUserProfile = async () => {
     const response = await api.get('/users/me');
     return response;
   } catch (error) {
+    console.error('Профильді алу қатесі:', error);
     throw error;
   }
 };
@@ -61,9 +75,12 @@ const getCurrentUserProfile = async () => {
  */
 const createUser = async (userData) => {
   try {
+    // Перед отправкой проверяем заголовки авторизации
+    console.log('Auth headers present:', !!api.getAuthHeader());
     const response = await api.post('/users', userData);
     return response;
   } catch (error) {
+    console.error('Пайдаланушы жасау қатесі:', error);
     throw error;
   }
 };
@@ -80,6 +97,7 @@ const updateUser = async (id, userData) => {
     const response = await api.put(`/users/${id}`, userData);
     return response;
   } catch (error) {
+    console.error(`Пайдаланушыны жаңарту қатесі (ID: ${id}):`, error);
     throw error;
   }
 };
@@ -95,6 +113,7 @@ const updateProfile = async (userData) => {
     const response = await api.put('/users/me', userData);
     return response;
   } catch (error) {
+    console.error('Профильді жаңарту қатесі:', error);
     throw error;
   }
 };
@@ -110,6 +129,23 @@ const deleteUser = async (id) => {
     const response = await api.delete(`/users/${id}`);
     return response;
   } catch (error) {
+    console.error(`Пайдаланушыны жою қатесі (ID: ${id}):`, error);
+    throw error;
+  }
+};
+
+/**
+ * Әкімші тіркеу (тек админдер үшін)
+ * 
+ * @param {Object} adminData - Админ мәліметтері
+ * @returns {Promise<Object>} - Жаңа админ мәліметтері
+ */
+const registerAdmin = async (adminData) => {
+  try {
+    const response = await api.post('/auth/register-admin', adminData);
+    return response;
+  } catch (error) {
+    console.error('Админ тіркеу қатесі:', error);
     throw error;
   }
 };
@@ -129,6 +165,7 @@ const uploadAvatar = async (file, onProgress) => {
     const response = await api.uploadFile('/users/me/avatar', formData, onProgress);
     return response;
   } catch (error) {
+    console.error('Аватар жүктеу қатесі:', error);
     throw error;
   }
 };
@@ -143,6 +180,7 @@ const getUserStats = async () => {
     const response = await api.get('/users/me/stats');
     return response;
   } catch (error) {
+    console.error('Статистиканы алу қатесі:', error);
     throw error;
   }
 };
@@ -156,6 +194,7 @@ const userService = {
   updateUser,
   updateProfile,
   deleteUser,
+  registerAdmin,
   uploadAvatar,
   getUserStats
 };

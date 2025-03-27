@@ -1,194 +1,259 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Box, 
-  Paper, 
-  Typography, 
-  Grid, 
-  Button, 
-  Chip, 
-  Divider, 
-  IconButton, 
-  Card, 
-  CardContent, 
+import React, { useState, useEffect, useContext } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import {
+  Box,
+  Paper,
+  Card,
+  CardContent,
   CardMedia,
-  LinearProgress,
+  Typography,
+  Grid,
+  Button,
+  Chip,
+  Divider,
+  CircularProgress,
+  Alert,
   Dialog,
   DialogActions,
   DialogContent,
   DialogContentText,
   DialogTitle,
-  CircularProgress,
-  Alert,
-  TextField,
+  Avatar,
+  Stack,
+  IconButton,
+  Tooltip,
   useTheme
 } from '@mui/material';
-import { 
+import {
   ArrowBack as ArrowBackIcon,
   CheckCircle as CheckCircleIcon,
   Schedule as ScheduleIcon,
-  AccessTime as AccessTimeIcon,
-  Edit as EditIcon,
-  Add as AddIcon,
-  CalendarToday as CalendarTodayIcon
+  Warning as WarningIcon,
+  Event as EventIcon,
+  Person as PersonIcon,
+  ExtensionOutlined as ExtendIcon,
+  Notes as NotesIcon,
+  LibraryBooks as LibraryBooksIcon
 } from '@mui/icons-material';
-import { useNavigate, useParams } from 'react-router-dom';
-import { format, formatDistance } from 'date-fns';
-import { kk } from 'date-fns/locale';
+import { AuthContext } from '../../context/AuthContext';
+import api from '../../services/api';
 
 // Функция для форматирования даты
 const formatDate = (dateString) => {
-  try {
-    return format(new Date(dateString), 'dd.MM.yyyy');
-  } catch (error) {
-    return dateString;
-  }
+  if (!dateString) return '-';
+  const date = new Date(dateString);
+  return date.toLocaleDateString('kk-KZ', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
 };
 
-// Функция для вычисления прогресса заимствования (в процентах)
-const calculateProgress = (borrowDate, dueDate) => {
-  const start = new Date(borrowDate).getTime();
-  const end = new Date(dueDate).getTime();
-  const now = new Date().getTime();
+// Функция для расчета оставшихся дней
+const calculateRemainingDays = (dueDate) => {
+  if (!dueDate) return 0;
   
-  if (now >= end) return 100;
-  if (now <= start) return 0;
+  const due = new Date(dueDate);
+  const now = new Date();
   
-  return Math.round(((now - start) / (end - start)) * 100);
+  // Устанавливаем время на полночь для корректного сравнения дат
+  due.setHours(0, 0, 0, 0);
+  now.setHours(0, 0, 0, 0);
+  
+  // Вычисляем разницу в миллисекундах и конвертируем в дни
+  const diffTime = due - now;
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
+  return diffDays;
 };
 
-// Функция для форматирования относительного времени
-const formatRelativeTime = (dateString) => {
-  try {
-    return formatDistance(new Date(dateString), new Date(), { 
-      addSuffix: true,
-      locale: kk 
-    });
-  } catch (error) {
-    return '';
-  }
-};
-
-const BorrowDetails = () => {
-  const theme = useTheme();
-  const navigate = useNavigate();
+/**
+ * Қарызға алу толық мәліметтері компоненті
+ * 
+ * @description Бұл компонент жеке қарызға алу туралы толық ақпаратты көрсетеді
+ * және оны басқаруға мүмкіндік береді.
+ */
+const BorrowDetail = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const theme = useTheme();
+  const { currentUser } = useContext(AuthContext);
   
   const [loading, setLoading] = useState(true);
   const [borrow, setBorrow] = useState(null);
-  const [openReturnDialog, setOpenReturnDialog] = useState(false);
-  const [openExtendDialog, setOpenExtendDialog] = useState(false);
-  const [returnLoading, setReturnLoading] = useState(false);
-  const [extendLoading, setExtendLoading] = useState(false);
-  const [actionSuccess, setActionSuccess] = useState(null);
-  const [notes, setNotes] = useState('');
+  const [message, setMessage] = useState({ type: '', text: '' });
+  const [returnDialogOpen, setReturnDialogOpen] = useState(false);
+  const [extendDialogOpen, setExtendDialogOpen] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
 
-  // Загрузка данных о заимствовании
   useEffect(() => {
-    // В реальном приложении здесь будет запрос к API
-    setTimeout(() => {
-      // Пример данных о заимствовании
-      const borrowData = {
-        id: parseInt(id),
-        user: {
-          id: 1,
-          name: 'Асан Серіков',
-          email: 'asan.serikov@example.com',
-          studentId: 'ST12345',
-          faculty: 'Экономика факультеті',
-          specialization: 'Қаржы',
-          year: '3 курс'
-        },
-        book: {
-          id: 1,
-          title: 'Қазақ әдебиетінің тарихы',
-          author: 'Мұхтар Әуезов',
-          category: 'Әдебиет',
-          isbn: '9789965357528',
-          cover: '/path/to/sample/cover.jpg'
-        },
-        borrowDate: '2023-05-15',
-        dueDate: '2023-07-15',
-        returnDate: null,
-        status: 'active',
-        notes: 'Кітап жақсы жағдайда берілді'
-      };
-      
-      setBorrow(borrowData);
-      setNotes(borrowData.notes || '');
-      setLoading(false);
-    }, 1500);
+    fetchBorrowDetails();
   }, [id]);
 
-  // Обработчик возврата книги
-  const handleReturn = () => {
-    setReturnLoading(true);
+  /**
+   * Получение детальной информации о займе
+   */
+  const fetchBorrowDetails = async () => {
+    setLoading(true);
     
-    // В реальном приложении здесь будет запрос к API
-    setTimeout(() => {
-      setBorrow({
-        ...borrow,
-        status: 'returned',
-        returnDate: new Date().toISOString().split('T')[0]
+    try {
+      const response = await api.get(`/borrows/${id}`);
+      
+      if (response && response.success) {
+        setBorrow(response.data);
+      } else {
+        throw new Error('Failed to fetch borrow details');
+      }
+    } catch (error) {
+      console.error('Error fetching borrow details:', error);
+      setMessage({
+        type: 'error',
+        text: 'Қарызға алу мәліметтерін жүктеу кезінде қате орын алды'
       });
-      
-      setReturnLoading(false);
-      setOpenReturnDialog(false);
-      setActionSuccess('Кітап сәтті қайтарылды');
-      
-      // Сброс сообщения об успехе через 3 секунды
-      setTimeout(() => {
-        setActionSuccess(null);
-      }, 3000);
-    }, 1500);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Обработчик продления срока заимствования
-  const handleExtend = () => {
-    setExtendLoading(true);
+  /**
+   * Обработчики диалога возврата книги
+   */
+  const handleReturnBook = () => {
+    setReturnDialogOpen(true);
+  };
+
+  const handleReturnDialogClose = () => {
+    setReturnDialogOpen(false);
+  };
+
+  /**
+   * Обработчики диалога продления займа
+   */
+  const handleExtendBorrow = () => {
+    setExtendDialogOpen(true);
+  };
+
+  const handleExtendDialogClose = () => {
+    setExtendDialogOpen(false);
+  };
+
+  /**
+   * Возврат книги
+   */
+  const confirmReturn = async () => {
+    setActionLoading(true);
     
-    // В реальном приложении здесь будет запрос к API
-    setTimeout(() => {
-      // Продление на 14 дней
-      const currentDueDate = new Date(borrow.dueDate);
-      currentDueDate.setDate(currentDueDate.getDate() + 14);
+    try {
+      const response = await api.put(`/borrows/${id}/return`);
       
-      setBorrow({
-        ...borrow,
-        dueDate: currentDueDate.toISOString().split('T')[0]
+      if (response.success) {
+        setMessage({
+          type: 'success',
+          text: 'Кітап сәтті қайтарылды'
+        });
+        
+        // Обновление информации о займе
+        fetchBorrowDetails();
+      } else {
+        throw new Error('Return operation failed');
+      }
+    } catch (error) {
+      console.error('Error returning book:', error);
+      setMessage({
+        type: 'error',
+        text: 'Кітапты қайтару кезінде қате орын алды'
       });
-      
-      setExtendLoading(false);
-      setOpenExtendDialog(false);
-      setActionSuccess('Қайтару мерзімі сәтті ұзартылды');
-      
-      // Сброс сообщения об успехе через 3 секунды
-      setTimeout(() => {
-        setActionSuccess(null);
-      }, 3000);
-    }, 1500);
+    } finally {
+      setActionLoading(false);
+      setReturnDialogOpen(false);
+    }
   };
 
-  // Обработчик сохранения примечаний
-  const handleSaveNotes = () => {
-    // В реальном приложении здесь будет запрос к API
-    setTimeout(() => {
-      setBorrow({
-        ...borrow,
-        notes: notes
+  /**
+   * Продление займа
+   */
+  const confirmExtend = async () => {
+    setActionLoading(true);
+    
+    try {
+      const response = await api.put(`/borrows/${id}/extend`);
+      
+      if (response.success) {
+        setMessage({
+          type: 'success',
+          text: 'Қарызға алу мерзімі сәтті ұзартылды'
+        });
+        
+        // Обновление информации о займе
+        fetchBorrowDetails();
+      } else {
+        throw new Error('Extend operation failed');
+      }
+    } catch (error) {
+      console.error('Error extending borrow:', error);
+      setMessage({
+        type: 'error',
+        text: 'Қарызға алу мерзімін ұзарту кезінде қате орын алды'
       });
-      
-      setActionSuccess('Ескертпелер сәтті сақталды');
-      
-      // Сброс сообщения об успехе через 3 секунды
-      setTimeout(() => {
-        setActionSuccess(null);
-      }, 3000);
-    }, 500);
+    } finally {
+      setActionLoading(false);
+      setExtendDialogOpen(false);
+    }
   };
 
+  /**
+   * Получение цвета индикатора статуса
+   */
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'active':
+        return theme.palette.primary.main;
+      case 'returned':
+        return theme.palette.success.main;
+      case 'overdue':
+        return theme.palette.error.main;
+      default:
+        return theme.palette.grey[500];
+    }
+  };
+
+  /**
+   * Получение текста статуса
+   */
+  const getStatusText = (status) => {
+    switch (status) {
+      case 'active':
+        return 'Белсенді';
+      case 'returned':
+        return 'Қайтарылған';
+      case 'overdue':
+        return 'Мерзімі өткен';
+      default:
+        return status;
+    }
+  };
+
+  /**
+   * Получение иконки статуса
+   */
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case 'active':
+        return <ScheduleIcon />;
+      case 'returned':
+        return <CheckCircleIcon />;
+      case 'overdue':
+        return <WarningIcon />;
+      default:
+        return null;
+    }
+  };
+  
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
         <CircularProgress />
       </Box>
     );
@@ -197,154 +262,85 @@ const BorrowDetails = () => {
   if (!borrow) {
     return (
       <Box>
-        <Typography variant="h6" color="error">
-          Қарызға алу табылмады
-        </Typography>
         <Button 
           startIcon={<ArrowBackIcon />} 
           onClick={() => navigate('/borrows')}
-          sx={{ mt: 2 }}
+          sx={{ mb: 2 }}
         >
-          Тізімге оралу
+          Қарызға алулар тізіміне оралу
         </Button>
+        
+        <Alert severity="error">
+          Қарызға алу мәліметтері табылмады немесе жүктеу кезінде қате орын алды
+        </Alert>
       </Box>
     );
   }
+  
+  // Проверка доступа
+  const canManageBorrow = currentUser && (
+    currentUser.id === borrow.userId || 
+    currentUser.role === 'admin' || 
+    currentUser.role === 'librarian'
+  );
 
-  const isActive = borrow.status === 'active';
-  const isOverdue = borrow.status === 'overdue';
-  const isReturned = borrow.status === 'returned';
-  const progress = calculateProgress(borrow.borrowDate, borrow.dueDate);
-  const progressColor = isOverdue 
-    ? theme.palette.error.main 
-    : progress > 80 
-      ? theme.palette.warning.main 
-      : theme.palette.primary.main;
-
+  // Расчет оставшихся дней (если заем активен)
+  const remainingDays = borrow.status === 'active' ? calculateRemainingDays(borrow.dueDate) : null;
+  
+  // Определение информации о статусе для активных займов
+  let statusInfo = null;
+  
   return (
     <Box>
-      {/* Заголовок и кнопка возврата в список */}
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-        <IconButton 
-          color="inherit" 
-          onClick={() => navigate('/borrows')}
-          sx={{ mr: 1 }}
+      {/* Навигация назад */}
+      <Button 
+        startIcon={<ArrowBackIcon />} 
+        onClick={() => navigate('/borrows')}
+        sx={{ mb: 2 }}
+      >
+        Қарызға алулар тізіміне оралу
+      </Button>
+      
+      {/* Сообщение */}
+      {message.text && (
+        <Alert 
+          severity={message.type} 
+          sx={{ mb: 3 }}
+          onClose={() => setMessage({ type: '', text: '' })}
         >
-          <ArrowBackIcon />
-        </IconButton>
-        <Typography variant="h5" fontWeight="medium">
-          Қарызға алу мәліметтері
-        </Typography>
-      </Box>
-
-      {/* Сообщение об успешном действии */}
-      {actionSuccess && (
-        <Alert severity="success" sx={{ mb: 3 }}>
-          {actionSuccess}
+          {message.text}
         </Alert>
       )}
-
+      
+      {/* Главная информация */}
       <Grid container spacing={3}>
-        {/* Основная информация */}
+        {/* Основная информация о займе */}
         <Grid item xs={12} md={8}>
-          <Paper sx={{ p: 3 }}>
-            <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Typography variant="h6">Негізгі ақпарат</Typography>
-              <Box>
-                {!isReturned && (
-                  <>
-                    <Button 
-                      variant="outlined" 
-                      color="primary"
-                      onClick={() => setOpenExtendDialog(true)}
-                      startIcon={<CalendarTodayIcon />}
-                      sx={{ mr: 1 }}
-                    >
-                      Мерзімді ұзарту
-                    </Button>
-                    <Button 
-                      variant="contained" 
-                      color="success"
-                      onClick={() => setOpenReturnDialog(true)}
-                      startIcon={<CheckCircleIcon />}
-                    >
-                      Қайтару
-                    </Button>
-                  </>
-                )}
-              </Box>
+          <Paper sx={{ p: 3, mb: 3 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Typography variant="h5" fontWeight="medium">
+                Қарызға алу #{borrow.id}
+              </Typography>
+              <Chip 
+                label={getStatusText(borrow.status)}
+                color={borrow.status === 'active' ? 'primary' : borrow.status === 'returned' ? 'success' : 'error'}
+                icon={getStatusIcon(borrow.status)}
+              />
             </Box>
-
-            <Divider sx={{ mb: 3 }} />
-
-            {/* Статус и прогресс */}
-            <Box sx={{ mb: 3 }}>
-              <Grid container spacing={2} alignItems="center">
-                <Grid item>
-                  {isActive && (
-                    <Chip 
-                      icon={<AccessTimeIcon />}
-                      label="Белсенді" 
-                      color="primary" 
-                      variant="outlined"
-                    />
-                  )}
-                  {isOverdue && (
-                    <Chip 
-                      icon={<ScheduleIcon />}
-                      label="Мерзімі өткен" 
-                      color="error"
-                      variant="outlined"
-                    />
-                  )}
-                  {isReturned && (
-                    <Chip 
-                      icon={<CheckCircleIcon />}
-                      label="Қайтарылған" 
-                      color="success" 
-                      variant="outlined"
-                    />
-                  )}
-                </Grid>
-                <Grid item xs>
-                  {!isReturned && (
-                    <Box sx={{ display: 'flex', alignItems: 'center', flexDirection: 'column', width: '100%' }}>
-                      <Box sx={{ width: '100%', mb: 1 }}>
-                        <LinearProgress 
-                          variant="determinate" 
-                          value={progress} 
-                          sx={{ 
-                            height: 10,
-                            borderRadius: 5,
-                            backgroundColor: theme.palette.grey[200],
-                            '& .MuiLinearProgress-bar': {
-                              backgroundColor: progressColor
-                            }
-                          }}
-                        />
-                      </Box>
-                      <Typography variant="body2" color="text.secondary">
-                        {isOverdue 
-                          ? `Мерзімінен ${formatRelativeTime(borrow.dueDate)} өтті` 
-                          : `Қайтару мерзіміне ${formatRelativeTime(borrow.dueDate)} қалды`}
-                      </Typography>
-                    </Box>
-                  )}
-                </Grid>
-              </Grid>
-            </Box>
-
-            {/* Детали заимствования */}
-            <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}>
+            
+            <Divider sx={{ my: 2 }} />
+            
+            {/* Даты */}
+            <Grid container spacing={2} sx={{ mb: 2 }}>
+              <Grid item xs={12} sm={4}>
                 <Typography variant="subtitle2" color="text.secondary">
-                  Берілген күн
+                  Алынған күн
                 </Typography>
                 <Typography variant="body1">
                   {formatDate(borrow.borrowDate)}
                 </Typography>
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid item xs={12} sm={4}>
                 <Typography variant="subtitle2" color="text.secondary">
                   Қайтару мерзімі
                 </Typography>
@@ -352,7 +348,7 @@ const BorrowDetails = () => {
                   {formatDate(borrow.dueDate)}
                 </Typography>
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid item xs={12} sm={4}>
                 <Typography variant="subtitle2" color="text.secondary">
                   Қайтарылған күн
                 </Typography>
@@ -360,206 +356,213 @@ const BorrowDetails = () => {
                   {borrow.returnDate ? formatDate(borrow.returnDate) : '-'}
                 </Typography>
               </Grid>
-              <Grid item xs={12} sm={6}>
-                <Typography variant="subtitle2" color="text.secondary">
-                  Күй
-                </Typography>
-                <Typography variant="body1">
-                  {isActive ? 'Белсенді' : isOverdue ? 'Мерзімі өткен' : 'Қайтарылған'}
-                </Typography>
-              </Grid>
             </Grid>
-
-            <Divider sx={{ my: 3 }} />
-
-            {/* Примечания */}
-            <Box>
-              <Typography variant="subtitle1" gutterBottom>
-                Ескертпелер
-              </Typography>
-              <TextField
-                fullWidth
-                multiline
-                rows={4}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                variant="outlined"
-                placeholder="Қарызға алу туралы ескертпелер енгізіңіз"
-                sx={{ mb: 2 }}
-              />
-              <Button 
-                variant="outlined" 
-                startIcon={<EditIcon />}
-                onClick={handleSaveNotes}
-              >
-                Ескертпелерді сақтау
-              </Button>
-            </Box>
+            
+            {/* Статус индикатор (для активных займов) */}
+            {borrow.status === 'active' && statusInfo && (
+              <Alert severity={statusInfo.severity} sx={{ mb: 2 }}>
+                {statusInfo.text}
+              </Alert>
+            )}
+            
+            {/* Заметки */}
+            {borrow.notes && (
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="subtitle2" sx={{ display: 'flex', alignItems: 'center' }}>
+                  <NotesIcon fontSize="small" sx={{ mr: 1 }} />
+                  Ескертпелер
+                </Typography>
+                <Paper variant="outlined" sx={{ p: 2, mt: 1, backgroundColor: 'background.default' }}>
+                  <Typography variant="body2">
+                    {borrow.notes}
+                  </Typography>
+                </Paper>
+              </Box>
+            )}
+            
+            {/* Кнопки действий */}
+            {borrow.status === 'active' && canManageBorrow && (
+              <Box sx={{ mt: 3, display: 'flex', gap: 2 }}>
+                <Button 
+                  variant="contained" 
+                  color="primary"
+                  startIcon={<CheckCircleIcon />}
+                  onClick={handleReturnBook}
+                  disabled={actionLoading}
+                >
+                  Қайтару
+                </Button>
+                <Button 
+                  variant="outlined" 
+                  color="primary"
+                  startIcon={<ExtendIcon />}
+                  onClick={handleExtendBorrow}
+                  disabled={actionLoading || remainingDays < 0}
+                >
+                  Мерзімді ұзарту
+                </Button>
+              </Box>
+            )}
           </Paper>
         </Grid>
-
+        
         {/* Информация о книге и пользователе */}
         <Grid item xs={12} md={4}>
           {/* Информация о книге */}
-          <Card sx={{ mb: 3 }}>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Кітап туралы
-              </Typography>
-              <Box sx={{ 
-                display: 'flex', 
-                flexDirection: { xs: 'column', sm: 'row', md: 'column' },
-                alignItems: { xs: 'center', sm: 'flex-start', md: 'center' },
-                gap: 2 
-              }}>
-                <CardMedia
-                  component="img"
-                  image={borrow.book.cover || "https://via.placeholder.com/150x200"}
-                  alt={borrow.book.title}
-                  sx={{ 
-                    width: { xs: '100%', sm: 150, md: '100%' },
-                    maxWidth: { xs: 200, sm: 150, md: 200 },
-                    mb: 2,
-                    borderRadius: 1,
-                    boxShadow: '0 4px 8px rgba(0,0,0,0.1)'
-                  }}
-                />
-                <Box>
-                  <Typography variant="subtitle1" fontWeight="medium">
-                    {borrow.book.title}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" gutterBottom>
-                    {borrow.book.author}
-                  </Typography>
-                  <Chip size="small" label={borrow.book.category} sx={{ mb: 1 }} />
-                  {borrow.book.isbn && (
-                    <Typography variant="caption" display="block" color="text.secondary">
-                      ISBN: {borrow.book.isbn}
-                    </Typography>
-                  )}
-                  <Button 
-                    size="small" 
-                    onClick={() => navigate(`/books/edit/${borrow.book.id}`)}
-                    sx={{ mt: 1 }}
+          {borrow.book && (
+            <Card sx={{ mb: 3 }}>
+              <Box sx={{ position: 'relative' }}>
+                {borrow.book.cover ? (
+                  <CardMedia
+                    component="img"
+                    height="200"
+                    image={borrow.book.cover}
+                    alt={borrow.book.title}
+                    sx={{ objectFit: 'contain', bgcolor: 'background.default' }}
+                  />
+                ) : (
+                  <Box
+                    sx={{
+                      height: 200,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      bgcolor: 'background.default'
+                    }}
                   >
-                    Кітапты қарау
+                    <LibraryBooksIcon sx={{ fontSize: 80, color: 'text.secondary' }} />
+                  </Box>
+                )}
+              </Box>
+              <CardContent>
+                <Typography variant="subtitle2" color="text.secondary">
+                  Кітап
+                </Typography>
+                <Typography variant="h6" gutterBottom>
+                  {borrow.book.title}
+                </Typography>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  {borrow.book.author}
+                </Typography>
+                
+                {borrow.book.category && (
+                  <Chip 
+                    label={borrow.book.category.name} 
+                    size="small" 
+                    variant="outlined"
+                    sx={{ mt: 1 }}
+                  />
+                )}
+                
+                <Box sx={{ mt: 2 }}>
+                  <Button 
+                    variant="outlined" 
+                    size="small" 
+                    fullWidth
+                    onClick={() => navigate(`/books/${borrow.bookId}`)}
+                  >
+                    Кітап туралы толық
                   </Button>
                 </Box>
-              </Box>
-            </CardContent>
-          </Card>
-
+              </CardContent>
+            </Card>
+          )}
+          
           {/* Информация о пользователе */}
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Оқырман туралы
-              </Typography>
-              <Typography variant="subtitle1" fontWeight="medium">
-                {borrow.user.name}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" gutterBottom>
-                {borrow.user.email}
-              </Typography>
-              <Divider sx={{ my: 1.5 }} />
-              <Grid container spacing={1}>
-                <Grid item xs={6}>
-                  <Typography variant="caption" color="text.secondary">
-                    Студент ID
-                  </Typography>
+          {borrow.user && (
+            <Card>
+              <CardContent>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                  <Avatar sx={{ width: 50, height: 50, mr: 2 }}>
+                    {borrow.user.name.charAt(0)}
+                  </Avatar>
+                  <Box>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Оқырман
+                    </Typography>
+                    <Typography variant="h6">
+                      {borrow.user.name}
+                    </Typography>
+                  </Box>
+                </Box>
+                
+                <Divider sx={{ my: 2 }} />
+                
+                <Stack spacing={1}>
                   <Typography variant="body2">
-                    {borrow.user.studentId}
+                    <strong>Email:</strong> {borrow.user.email}
                   </Typography>
-                </Grid>
-                <Grid item xs={6}>
-                  <Typography variant="caption" color="text.secondary">
-                    Курс/Жыл
-                  </Typography>
-                  <Typography variant="body2">
-                    {borrow.user.year}
-                  </Typography>
-                </Grid>
-                <Grid item xs={12}>
-                  <Typography variant="caption" color="text.secondary">
-                    Факультет
-                  </Typography>
-                  <Typography variant="body2">
-                    {borrow.user.faculty}
-                  </Typography>
-                </Grid>
-                <Grid item xs={12}>
-                  <Typography variant="caption" color="text.secondary">
-                    Мамандық
-                  </Typography>
-                  <Typography variant="body2">
-                    {borrow.user.specialization}
-                  </Typography>
-                </Grid>
-              </Grid>
-              <Button 
-                size="small" 
-                onClick={() => navigate(`/users/edit/${borrow.user.id}`)}
-                sx={{ mt: 2 }}
-              >
-                Пайдаланушыны қарау
-              </Button>
-            </CardContent>
-          </Card>
+                  {borrow.user.studentId && (
+                    <Typography variant="body2">
+                      <strong>ID:</strong> {borrow.user.studentId}
+                    </Typography>
+                  )}
+                </Stack>
+                
+                {(currentUser && currentUser.role === 'admin') && (
+                  <Box sx={{ mt: 2 }}>
+                    <Button 
+                      variant="outlined" 
+                      size="small" 
+                      fullWidth
+                      onClick={() => navigate(`/users/${borrow.userId}`)}
+                    >
+                      Оқырман профилі
+                    </Button>
+                  </Box>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </Grid>
       </Grid>
-
-      {/* Диалог подтверждения возврата */}
+      
+      {/* Диалог подтверждения возврата книги */}
       <Dialog
-        open={openReturnDialog}
-        onClose={() => setOpenReturnDialog(false)}
+        open={returnDialogOpen}
+        onClose={handleReturnDialogClose}
       >
         <DialogTitle>Кітапты қайтару</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            "{borrow.book.title}" кітабын қайтарылды деп белгілегіңіз келе ме?
+            Бұл кітапты қайтарылды деп белгілегіңіз келе ме?
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button 
-            onClick={() => setOpenReturnDialog(false)} 
-            disabled={returnLoading}
-          >
+          <Button onClick={handleReturnDialogClose} disabled={actionLoading}>
             Бас тарту
           </Button>
           <Button 
-            onClick={handleReturn} 
-            color="success" 
-            disabled={returnLoading}
-            startIcon={returnLoading ? <CircularProgress size={20} /> : null}
+            onClick={confirmReturn} 
+            color="primary" 
+            disabled={actionLoading}
+            startIcon={actionLoading ? <CircularProgress size={20} /> : null}
           >
-            Қайтарылды
+            Қайтару
           </Button>
         </DialogActions>
       </Dialog>
-
-      {/* Диалог подтверждения продления */}
+      
+      {/* Диалог подтверждения продления займа */}
       <Dialog
-        open={openExtendDialog}
-        onClose={() => setOpenExtendDialog(false)}
+        open={extendDialogOpen}
+        onClose={handleExtendDialogClose}
       >
-        <DialogTitle>Мерзімді ұзарту</DialogTitle>
+        <DialogTitle>Қарызға алу мерзімін ұзарту</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            "{borrow.book.title}" кітабының қайтару мерзімін 14 күнге ұзартқыңыз келе ме?
+            Бұл қарызға алу мерзімін ұзартқыңыз келе ме?
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button 
-            onClick={() => setOpenExtendDialog(false)} 
-            disabled={extendLoading}
-          >
+          <Button onClick={handleExtendDialogClose} disabled={actionLoading}>
             Бас тарту
           </Button>
           <Button 
-            onClick={handleExtend} 
+            onClick={confirmExtend} 
             color="primary" 
-            disabled={extendLoading}
-            startIcon={extendLoading ? <CircularProgress size={20} /> : null}
+            disabled={actionLoading}
+            startIcon={actionLoading ? <CircularProgress size={20} /> : null}
           >
             Ұзарту
           </Button>
@@ -567,6 +570,27 @@ const BorrowDetails = () => {
       </Dialog>
     </Box>
   );
+  if (borrow.status === 'active') {
+    if (remainingDays > 0) {
+      statusInfo = {
+        text: `Қайтаруға ${remainingDays} күн қалды`,
+        color: theme.palette.info.main,
+        severity: 'info'
+      };
+    } else if (remainingDays === 0) {
+      statusInfo = {
+        text: 'Бүгін қайтару керек',
+        color: theme.palette.warning.main,
+        severity: 'warning'
+      };
+    } else {
+      statusInfo = {
+        text: `Мерзімі ${Math.abs(remainingDays)} күн бұрын өтті`,
+        color: theme.palette.error.main,
+        severity: 'error'
+      };
+    }
+  }
 };
 
-export default BorrowDetails;
+export default BorrowDetail;

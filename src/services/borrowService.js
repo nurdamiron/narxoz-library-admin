@@ -6,24 +6,6 @@
 import api from './api';
 
 /**
- * Пайдаланушының барлық қарызға алуларын алу
- * 
- * @param {Object} params - Сұраныс параметрлері
- * @param {number} [params.page=1] - Бет нөмірі
- * @param {number} [params.limit=10] - Бір беттегі қарызға алулар саны
- * @param {string} [params.status] - Мәртебе бойынша сүзу
- * @returns {Promise<Object>} - Қарызға алулар тізімі мен пагинация
- */
-const getUserBorrows = async (params = {}) => {
-  try {
-    const response = await api.get('/borrows', params);
-    return response;
-  } catch (error) {
-    throw error;
-  }
-};
-
-/**
  * Барлық қарызға алуларды алу (тек әкімші/кітапханашы)
  * 
  * @param {Object} params - Сұраныс параметрлері
@@ -39,9 +21,13 @@ const getUserBorrows = async (params = {}) => {
  */
 const getAllBorrows = async (params = {}) => {
   try {
-    const response = await api.get('/borrows/all', params);
+    // Исправлен URL для соответствия с бэкендом
+    // В бэкенде используется маршрут /api/borrows 
+    // или GET /api/borrows с параметрами, вместо /api/borrows/all
+    const response = await api.get('/borrows', { params });
     return response;
   } catch (error) {
+    console.error('Қарызға алуларды алу қатесі:', error);
     throw error;
   }
 };
@@ -57,6 +43,7 @@ const getBorrow = async (id) => {
     const response = await api.get(`/borrows/${id}`);
     return response;
   } catch (error) {
+    console.error(`Қарызға алуды алу қатесі (ID: ${id}):`, error);
     throw error;
   }
 };
@@ -72,6 +59,7 @@ const borrowBook = async (bookId) => {
     const response = await api.post('/borrows', { bookId });
     return response;
   } catch (error) {
+    console.error('Кітапты қарызға алу қатесі:', error);
     throw error;
   }
 };
@@ -87,6 +75,7 @@ const returnBook = async (id) => {
     const response = await api.put(`/borrows/${id}/return`);
     return response;
   } catch (error) {
+    console.error(`Кітапты қайтару қатесі (ID: ${id}):`, error);
     throw error;
   }
 };
@@ -102,6 +91,7 @@ const extendBorrow = async (id) => {
     const response = await api.put(`/borrows/${id}/extend`);
     return response;
   } catch (error) {
+    console.error(`Қарызға алу мерзімін ұзарту қатесі (ID: ${id}):`, error);
     throw error;
   }
 };
@@ -121,6 +111,7 @@ const updateBorrow = async (id, borrowData) => {
     const response = await api.put(`/borrows/${id}`, borrowData);
     return response;
   } catch (error) {
+    console.error(`Қарызға алуды жаңарту қатесі (ID: ${id}):`, error);
     throw error;
   }
 };
@@ -135,20 +126,7 @@ const checkOverdueBorrows = async () => {
     const response = await api.get('/borrows/check-overdue');
     return response;
   } catch (error) {
-    throw error;
-  }
-};
-
-/**
- * Қайтару күні жақындаған қарызға алулар үшін еске салғыштар жіберу
- * 
- * @returns {Promise<Object>} - Еске салғыштар жіберу нәтижесі
- */
-const sendDueReminders = async () => {
-  try {
-    const response = await api.get('/borrows/send-reminders');
-    return response;
-  } catch (error) {
+    console.error('Мерзімі өткен қарызға алуларды тексеру қатесі:', error);
     throw error;
   }
 };
@@ -163,21 +141,40 @@ const getBorrowStats = async () => {
     const response = await api.get('/borrows/stats');
     return response;
   } catch (error) {
+    console.error('Қарызға алу статистикасын алу қатесі:', error);
+    throw error;
+  }
+};
+
+/**
+ * Пайдаланушының барлық қарызға алуларын алу
+ * 
+ * @param {Object} params - Сұраныс параметрлері
+ * @param {number} [params.page=1] - Бет нөмірі
+ * @param {number} [params.limit=10] - Бір беттегі қарызға алулар саны
+ * @param {string} [params.status] - Мәртебе бойынша сүзу
+ * @returns {Promise<Object>} - Қарызға алулар тізімі мен пагинация
+ */
+const getUserBorrows = async (params = {}) => {
+  try {
+    const response = await api.get('/borrows', { params });
+    return response;
+  } catch (error) {
+    console.error('Пайдаланушы қарызға алуларын алу қатесі:', error);
     throw error;
   }
 };
 
 // Экспорттар
 const borrowService = {
-  getUserBorrows,
   getAllBorrows,
+  getUserBorrows,
   getBorrow,
   borrowBook,
   returnBook,
   extendBorrow,
   updateBorrow,
   checkOverdueBorrows,
-  sendDueReminders,
   getBorrowStats
 };
 

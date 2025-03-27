@@ -30,7 +30,14 @@ import {
   Delete as DeleteIcon,
   Category as CategoryIcon
 } from '@mui/icons-material';
+import bookService from '../../services/bookService';
 
+/**
+ * Категориялар тізімі компоненті
+ * 
+ * @description Бұл компонент категорияларды басқаруға арналған интерфейсті көрсетеді.
+ * Ол категорияларды көру, қосу, өңдеу және жою мүмкіндіктерін ұсынады.
+ */
 const CategoriesList = () => {
   const theme = useTheme();
   const [loading, setLoading] = useState(true);
@@ -42,59 +49,79 @@ const CategoriesList = () => {
   const [formData, setFormData] = useState({ name: '', description: '' });
   const [formErrors, setFormErrors] = useState({ name: '', description: '' });
   const [actionLoading, setActionLoading] = useState(false);
-  const [actionSuccess, setActionSuccess] = useState(null);
+  const [message, setMessage] = useState({ type: '', text: '' });
   const [stats, setStats] = useState([]);
   
-  // Загрузка категорий
+  // Загрузка категорий при монтировании компонента
   useEffect(() => {
     fetchCategories();
   }, []);
 
-  // Имитация загрузки категорий с сервера
-  const fetchCategories = () => {
+  /**
+   * Получение списка категорий с сервера
+   */
+  const fetchCategories = async () => {
     setLoading(true);
-    // В реальном приложении здесь будет запрос к API
-    setTimeout(() => {
-      const dummyCategories = [
-        { id: 1, name: 'Әдебиет', description: 'Көркем әдебиет және поэзия', booksCount: 42 },
-        { id: 2, name: 'Экономика', description: 'Экономика және бизнес туралы кітаптар', booksCount: 38 },
-        { id: 3, name: 'Математика', description: 'Математика және статистика', booksCount: 25 },
-        { id: 4, name: 'Қаржы', description: 'Қаржы, банк ісі және инвестициялар', booksCount: 31 },
-        { id: 5, name: 'Маркетинг', description: 'Маркетинг, жарнама және PR', booksCount: 27 },
-        { id: 6, name: 'Информатика', description: 'Компьютер ғылымдары және бағдарламалау', booksCount: 35 },
-        { id: 7, name: 'Бухгалтерия', description: 'Бухгалтерлік есеп және аудит', booksCount: 18 },
-        { id: 8, name: 'Менеджмент', description: 'Басқару және ұйымдастыру', booksCount: 24 },
-        { id: 9, name: 'Бизнес', description: 'Кәсіпкерлік және бизнес стратегиялары', booksCount: 29 },
-        { id: 10, name: 'Саясаттану', description: 'Саясат, мемлекеттік басқару және халықаралық қатынастар', booksCount: 19 },
-        { id: 11, name: 'Физика', description: 'Физика және жаратылыстану ғылымдары', booksCount: 22 }
-      ];
+    
+    try {
+      const response = await bookService.getCategories();
       
-      setCategories(dummyCategories);
-      
-      // Создание статистики для дашборда
-      const totalBooks = dummyCategories.reduce((sum, cat) => sum + cat.booksCount, 0);
-      const topCategories = [...dummyCategories]
-        .sort((a, b) => b.booksCount - a.booksCount)
-        .slice(0, 3);
-      
-      setStats([
-        { title: 'Барлық категориялар', value: dummyCategories.length, color: theme.palette.primary.main },
-        { title: 'Барлық кітаптар', value: totalBooks, color: theme.palette.info.main },
-        { title: 'Ең танымал категория', value: topCategories[0]?.name, color: theme.palette.success.main }
-      ]);
-      
+      if (response.success) {
+        const categoriesData = response.data || [];
+        setCategories(categoriesData);
+        
+        // Формирование статистики
+        generateStats(categoriesData);
+      } else {
+        throw new Error('Failed to fetch categories');
+      }
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+      setMessage({
+        type: 'error',
+        text: 'Категорияларды жүктеу кезінде қате орын алды'
+      });
+    } finally {
       setLoading(false);
-    }, 1000);
+    }
   };
 
-  // Открытие диалога добавления категории
+  /**
+   * Формирование статистики на основе данных о категориях
+   */
+  const generateStats = (categoriesData) => {
+    // Общее количество книг
+    const totalBooks = categoriesData.reduce((sum, cat) => sum + (cat.books?.length || 0), 0);
+    
+    // Нахождение самой популярной категории
+    let topCategory = { name: '-', booksCount: 0 };
+    
+    categoriesData.forEach(cat => {
+      const booksCount = cat.books?.length || 0;
+      if (booksCount > topCategory.booksCount) {
+        topCategory = { name: cat.name, booksCount };
+      }
+    });
+    
+    setStats([
+      { title: 'Барлық категориялар', value: categoriesData.length, color: theme.palette.primary.main },
+      { title: 'Барлық кітаптар', value: totalBooks, color: theme.palette.info.main },
+      { title: 'Ең танымал категория', value: topCategory.name, color: theme.palette.success.main }
+    ]);
+  };
+
+  /**
+   * Открытие диалога добавления категории
+   */
   const handleOpenAddDialog = () => {
     setFormData({ name: '', description: '' });
     setFormErrors({ name: '', description: '' });
     setOpenAddDialog(true);
   };
 
-  // Открытие диалога редактирования категории
+  /**
+   * Открытие диалога редактирования категории
+   */
   const handleOpenEditDialog = (category) => {
     setSelectedCategory(category);
     setFormData({ name: category.name, description: category.description || '' });
@@ -102,20 +129,26 @@ const CategoriesList = () => {
     setOpenEditDialog(true);
   };
 
-  // Открытие диалога удаления категории
+  /**
+   * Открытие диалога удаления категории
+   */
   const handleOpenDeleteDialog = (category) => {
     setSelectedCategory(category);
     setOpenDeleteDialog(true);
   };
 
-  // Закрытие всех диалогов
+  /**
+   * Закрытие всех диалогов
+   */
   const handleCloseDialogs = () => {
     setOpenAddDialog(false);
     setOpenEditDialog(false);
     setOpenDeleteDialog(false);
   };
 
-  // Обработчик изменения полей формы
+  /**
+   * Обработчик изменения полей формы
+   */
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData({
@@ -132,7 +165,9 @@ const CategoriesList = () => {
     }
   };
 
-  // Валидация формы
+  /**
+   * Валидация формы
+   */
   const validateForm = () => {
     const errors = {};
     let isValid = true;
@@ -154,89 +189,117 @@ const CategoriesList = () => {
     return isValid;
   };
 
-  // Добавление новой категории
-  const handleAddCategory = () => {
+  /**
+   * Добавление новой категории
+   */
+  const handleAddCategory = async () => {
     if (!validateForm()) {
       return;
     }
 
     setActionLoading(true);
     
-    // В реальном приложении здесь будет запрос к API
-    setTimeout(() => {
-      const newCategory = {
-        id: categories.length + 1,
-        name: formData.name,
-        description: formData.description,
-        booksCount: 0
-      };
+    try {
+      const response = await bookService.createCategory(formData);
       
-      setCategories([...categories, newCategory]);
-      setActionSuccess('Категория сәтті қосылды');
-      setActionLoading(false);
-      handleCloseDialogs();
-      
-      // Сброс сообщения об успехе через 3 секунды
-      setTimeout(() => {
-        setActionSuccess(null);
-      }, 3000);
-    }, 1000);
-  };
-
-  // Редактирование категории
-  const handleEditCategory = () => {
-    if (!validateForm()) {
-      return;
-    }
-
-    setActionLoading(true);
-    
-    // В реальном приложении здесь будет запрос к API
-    setTimeout(() => {
-      const updatedCategories = categories.map(cat => 
-        cat.id === selectedCategory.id 
-          ? { ...cat, name: formData.name, description: formData.description }
-          : cat
-      );
-      
-      setCategories(updatedCategories);
-      setActionSuccess('Категория сәтті жаңартылды');
-      setActionLoading(false);
-      handleCloseDialogs();
-      
-      // Сброс сообщения об успехе через 3 секунды
-      setTimeout(() => {
-        setActionSuccess(null);
-      }, 3000);
-    }, 1000);
-  };
-
-  // Удаление категории
-  const handleDeleteCategory = () => {
-    setActionLoading(true);
-    
-    // В реальном приложении здесь будет запрос к API
-    setTimeout(() => {
-      // Проверка на наличие книг в категории
-      if (selectedCategory.booksCount > 0) {
-        setActionSuccess({
-          severity: 'error',
-          message: `Категорияда ${selectedCategory.booksCount} кітап бар. Алдымен кітаптарды басқа категорияларға ауыстырыңыз.`
+      if (response.success) {
+        setMessage({
+          type: 'success',
+          text: 'Категория сәтті қосылды'
         });
-        setActionLoading(false);
+        
+        // Обновление списка категорий
+        await fetchCategories();
         handleCloseDialogs();
       } else {
-        setCategories(categories.filter(cat => cat.id !== selectedCategory.id));
-        setActionSuccess('Категория сәтті жойылды');
-        setActionLoading(false);
-        handleCloseDialogs();
+        throw new Error('Failed to create category');
       }
+    } catch (error) {
+      console.error('Error creating category:', error);
+      setMessage({
+        type: 'error',
+        text: 'Категорияны қосу кезінде қате орын алды'
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  /**
+   * Редактирование категории
+   */
+  const handleEditCategory = async () => {
+    if (!validateForm()) {
+      return;
+    }
+
+    setActionLoading(true);
+    
+    try {
+      const response = await bookService.updateCategory(selectedCategory.id, formData);
       
-      // Сброс сообщения об успехе через 3 секунды
-      setTimeout(() => {
-        setActionSuccess(null);
-      }, 3000);
-    }, 1000);
+      if (response.success) {
+        setMessage({
+          type: 'success',
+          text: 'Категория сәтті жаңартылды'
+        });
+        
+        // Обновление списка категорий
+        await fetchCategories();
+        handleCloseDialogs();
+      } else {
+        throw new Error('Failed to update category');
+      }
+    } catch (error) {
+      console.error('Error updating category:', error);
+      setMessage({
+        type: 'error',
+        text: 'Категорияны жаңарту кезінде қате орын алды'
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  /**
+   * Удаление категории
+   */
+  const handleDeleteCategory = async () => {
+    setActionLoading(true);
+    
+    try {
+      const response = await bookService.deleteCategory(selectedCategory.id);
+      
+      if (response.success) {
+        setMessage({
+          type: 'success',
+          text: 'Категория сәтті жойылды'
+        });
+        
+        // Обновление списка категорий
+        await fetchCategories();
+        handleCloseDialogs();
+      } else {
+        throw new Error('Failed to delete category');
+      }
+    } catch (error) {
+      console.error('Error deleting category:', error);
+      
+      // Проверка на ошибку при наличии книг в категории
+      if (error.response && error.response.status === 400) {
+        setMessage({
+          type: 'error',
+          text: `Категорияда кітаптар бар. Алдымен кітаптарды басқа категорияларға ауыстырыңыз.`
+        });
+      } else {
+        setMessage({
+          type: 'error',
+          text: 'Категорияны жою кезінде қате орын алды'
+        });
+      }
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   return (
@@ -256,12 +319,13 @@ const CategoriesList = () => {
       </Box>
 
       {/* Сообщение об успешном действии или ошибке */}
-      {actionSuccess && (
+      {message.text && (
         <Alert 
-          severity={typeof actionSuccess === 'object' ? actionSuccess.severity : 'success'} 
+          severity={message.type} 
           sx={{ mb: 3 }}
+          onClose={() => setMessage({ type: '', text: '' })}
         >
-          {typeof actionSuccess === 'object' ? actionSuccess.message : actionSuccess}
+          {message.text}
         </Alert>
       )}
 
@@ -334,7 +398,7 @@ const CategoriesList = () => {
                       </Typography>
                     </TableCell>
                     <TableCell>{category.description || '-'}</TableCell>
-                    <TableCell>{category.booksCount}</TableCell>
+                    <TableCell>{category.books?.length || 0}</TableCell>
                     <TableCell align="right">
                       <IconButton 
                         size="small" 
@@ -472,9 +536,9 @@ const CategoriesList = () => {
         <DialogTitle>Категорияны жою</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            {selectedCategory && selectedCategory.booksCount > 0 ? (
+            {selectedCategory && selectedCategory.books && selectedCategory.books.length > 0 ? (
               <>
-                <strong>{selectedCategory.name}</strong> категориясында {selectedCategory.booksCount} кітап бар. 
+                <strong>{selectedCategory.name}</strong> категориясында кітаптар бар. 
                 Категорияны жою үшін алдымен барлық кітаптарды басқа категорияларға ауыстыру қажет.
               </>
             ) : (
@@ -489,7 +553,7 @@ const CategoriesList = () => {
           <Button onClick={handleCloseDialogs} disabled={actionLoading}>
             Бас тарту
           </Button>
-          {selectedCategory && selectedCategory.booksCount === 0 && (
+          {selectedCategory && (!selectedCategory.books || selectedCategory.books.length === 0) && (
             <Button 
               onClick={handleDeleteCategory} 
               color="error"

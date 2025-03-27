@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { 
   Box, 
   Paper, 
@@ -40,6 +40,9 @@ import {
   FilterList as FilterListIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import userService from '../../services/userService';
+import authService from '../../services/authService';
+import { AuthContext } from '../../context/AuthContext';
 
 // Функция для генерации инициалов из имени
 const getInitials = (name) => {
@@ -65,9 +68,17 @@ const UserAvatar = ({ name, avatar }) => {
   );
 };
 
+/**
+ * Пайдаланушылар тізімі компоненті
+ * 
+ * @description Бұл компонент жүйенің барлық пайдаланушыларын тізім түрінде көрсетеді
+ * және оларды басқаруға мүмкіндік береді (іздеу, сүзу, құру, өңдеу, жою).
+ */
 const UsersList = () => {
   const theme = useTheme();
   const navigate = useNavigate();
+  const { currentUser, hasRole } = useContext(AuthContext);
+  
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState([]);
   const [page, setPage] = useState(0);
@@ -79,59 +90,116 @@ const UsersList = () => {
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
-  const [actionSuccess, setActionSuccess] = useState(null);
+  const [message, setMessage] = useState({ type: '', text: '' });
 
   // Загрузка данных с сервера
   useEffect(() => {
-    fetchUsers();
-  }, [page, rowsPerPage, search, roleFilter]);
+    // Immediately check for role access
+    checkRoleAccess();
+    
+    // Call fetchUsers only if we have proper access
+    if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'librarian')) {
+      fetchUsers();
+    }
+  }, [page, rowsPerPage, search, roleFilter, currentUser]);
 
-  // Имитация загрузки пользователей с сервера
-  const fetchUsers = () => {
-    setLoading(true);
-    // В реальном приложении здесь будет запрос к API
-    setTimeout(() => {
-      const dummyUsers = [
-        { id: 1, name: 'Асан Серіков', email: 'asan.serikov@example.com', studentId: 'ST12345', faculty: 'Экономика факультеті', specialization: 'Қаржы', year: '3 курс', role: 'user', avatar: null },
-        { id: 2, name: 'Айгүл Қасымова', email: 'aigul.kasymova@example.com', studentId: 'ST12346', faculty: 'Экономика факультеті', specialization: 'Маркетинг', year: '2 курс', role: 'user', avatar: null },
-        { id: 3, name: 'Бауыржан Тоқтаров', email: 'bauyrzhan.toktarov@example.com', studentId: 'ST12347', faculty: 'IT факультеті', specialization: 'Информатика', year: '4 курс', role: 'user', avatar: null },
-        { id: 4, name: 'Дәмеш Ахметова', email: 'damesh.akhmetova@example.com', studentId: 'ST12348', faculty: 'Экономика факультеті', specialization: 'Қаржы', year: '3 курс', role: 'user', avatar: null },
-        { id: 5, name: 'Нұрлан Тастанов', email: 'nurlan.tastanov@example.com', studentId: 'ST12349', faculty: 'IT факультеті', specialization: 'Компьютерлік ғылымдар', year: '2 курс', role: 'user', avatar: null },
-        { id: 6, name: 'Сәуле Тұрсынова', email: 'saule.tursynova@example.com', studentId: 'LB12345', faculty: 'Кітапханашы', specialization: 'Негізгі зал', year: 'N/A', role: 'librarian', avatar: null },
-        { id: 7, name: 'Әкімші', email: 'admin@narxoz.kz', studentId: 'ADMIN-001', faculty: 'Әкімшілік', specialization: 'Кітапхана', year: 'N/A', role: 'admin', avatar: null }
-      ];
+  /**
+   * Check if current user has permission to access this page
+   */
+  const checkRoleAccess = () => {
+    if (!currentUser) {
+      console.error('No user data available to check roles');
       
-      // Применение фильтров
-      let filteredUsers = dummyUsers;
+      // Try to fix auth state by refreshing it
+      authService.refreshAuthState();
       
-      // Фильтр по роли
-      if (roleFilter) {
-        filteredUsers = filteredUsers.filter(user => user.role === roleFilter);
-      }
-      
-      // Фильтр по поиску
-      if (search) {
-        const searchLower = search.toLowerCase();
-        filteredUsers = filteredUsers.filter(user => 
-          user.name.toLowerCase().includes(searchLower) || 
-          user.email.toLowerCase().includes(searchLower) || 
-          user.studentId.toLowerCase().includes(searchLower)
-        );
-      }
-      
-      // Пагинация
-      const paginatedUsers = filteredUsers.slice(
-        page * rowsPerPage, 
-        page * rowsPerPage + rowsPerPage
-      );
-      
-      setUsers(paginatedUsers);
-      setTotalUsers(filteredUsers.length);
+      setMessage({
+        type: 'warning',
+        text: 'Пайдаланушы мәліметтері жүктелмеді. Жүйеге қайта кіріңіз.'
+      });
+      return false;
+    }
+    
+    console.log('Current user role for access check:', currentUser.role);
+    
+    if (currentUser.role !== 'admin' && currentUser.role !== 'librarian') {
+      setMessage({
+        type: 'warning',
+        text: 'Тек әкімші немесе кітапханашылар пайдаланушылар тізіміне қол жеткізе алады'
+      });
+      setUsers([]);
+      setTotalUsers(0);
       setLoading(false);
-    }, 1000);
+      return false;
+    }
+    
+    return true;
   };
 
-  // Обработчики пагинации
+  /**
+   * Получение списка пользователей с фильтрацией и пагинацией
+   */
+  const fetchUsers = async () => {
+    setLoading(true);
+    
+    try {
+      // Additional validation of the user role
+      if (!checkRoleAccess()) {
+        return;
+      }
+      
+      // Подготовка параметров запроса
+      const params = {
+        page: page + 1,
+        limit: rowsPerPage
+      };
+      
+      // Добавление параметров поиска и фильтрации
+      if (search) params.search = search;
+      if (roleFilter) params.role = roleFilter;
+      
+      console.log('Fetching users with params:', params);
+      
+      // Запрос к API
+      const response = await userService.getUsers(params);
+      
+      // Обработка успешного ответа
+      if (response && response.success) {
+        setUsers(response.data || []);
+        setTotalUsers(response.total || 0);
+      } else {
+        console.error('API response is not successful:', response);
+        throw new Error('API returned unsuccessfully');
+      }
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      
+      let errorMessage = 'Пайдаланушыларды жүктеу кезінде қате орын алды';
+      
+      // Определение конкретной ошибки для понятного сообщения пользователю
+      if (error.response) {
+        if (error.response.status === 403) {
+          errorMessage = 'Тізімге қол жеткізу үшін рұқсат жоқ. Тек әкімшілер мен кітапханашыларға рұқсат етіледі.';
+        } else if (error.response.status === 401) {
+          errorMessage = 'Сеансыңыздың мерзімі аяқталды. Қайта кіріңіз.';
+        }
+      }
+      
+      setMessage({
+        type: 'error',
+        text: errorMessage
+      });
+      
+      setUsers([]);
+      setTotalUsers(0);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /**
+   * Обработчики пагинации
+   */
   const handleChangePage = (event, newPage) => {
     setPage(newPage);
   };
@@ -141,65 +209,89 @@ const UsersList = () => {
     setPage(0);
   };
 
-  // Обработчик изменения поиска
+  /**
+   * Обработчик поиска пользователей
+   */
   const handleSearchChange = (e) => {
     setSearch(e.target.value);
-    setPage(0);
+    setPage(0); // Сброс пагинации при изменении поиска
   };
 
-  // Обработчик изменения фильтра роли
+  /**
+   * Обработчик фильтра по роли
+   */
   const handleRoleFilterChange = (e) => {
     setRoleFilter(e.target.value);
-    setPage(0);
+    setPage(0); // Сброс пагинации при изменении фильтра
   };
 
-  // Открытие меню действий
+  /**
+   * Обработчики меню действий
+   */
   const handleMenuOpen = (event, userId) => {
     setAnchorEl(event.currentTarget);
     setSelectedUserId(userId);
   };
 
-  // Закрытие меню действий
   const handleMenuClose = () => {
     setAnchorEl(null);
   };
 
-  // Открытие диалога подтверждения удаления
+  /**
+   * Обработчики диалога удаления
+   */
   const handleDeleteClick = () => {
     handleMenuClose();
     setOpenDeleteDialog(true);
   };
 
-  // Закрытие диалога подтверждения удаления
   const handleDeleteDialogClose = () => {
     setOpenDeleteDialog(false);
   };
 
-  // Подтверждение удаления пользователя
-  const confirmDelete = () => {
+  /**
+   * Удаление пользователя
+   */
+  const confirmDelete = async () => {
     setDeleteLoading(true);
-    // В реальном приложении здесь будет запрос к API
-    setTimeout(() => {
-      setUsers(users.filter(user => user.id !== selectedUserId));
-      setTotalUsers(totalUsers - 1);
+    
+    try {
+      const response = await userService.deleteUser(selectedUserId);
+      
+      if (response.success) {
+        setMessage({
+          type: 'success',
+          text: 'Пайдаланушы сәтті жойылды'
+        });
+        
+        // Обновление списка пользователей
+        fetchUsers();
+      } else {
+        throw new Error('Delete operation failed');
+      }
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      setMessage({
+        type: 'error',
+        text: 'Пайдаланушыны жою кезінде қате орын алды'
+      });
+    } finally {
       setDeleteLoading(false);
       setOpenDeleteDialog(false);
-      setActionSuccess('Пайдаланушы сәтті жойылды');
-      
-      // Сброс сообщения об успехе через 3 секунды
-      setTimeout(() => {
-        setActionSuccess(null);
-      }, 3000);
-    }, 1000);
+    }
   };
 
-  // Редактирование пользователя
+  /**
+   * Переход к редактированию пользователя
+   */
   const handleEditClick = () => {
     handleMenuClose();
     navigate(`/users/edit/${selectedUserId}`);
   };
 
-  // Перевод роли на казахский
+  /**
+   * Перевод роли на казахский
+   */
   const translateRole = (role) => {
     switch (role) {
       case 'admin':
@@ -213,7 +305,9 @@ const UsersList = () => {
     }
   };
 
-  // Получение цвета для чипа роли
+  /**
+   * Получение цвета для чипа роли
+   */
   const getRoleColor = (role) => {
     switch (role) {
       case 'admin':
@@ -227,6 +321,53 @@ const UsersList = () => {
     }
   };
 
+  // Manual admin role fix button
+  const handleFixAdminRole = () => {
+    authService.refreshAuthState();
+    window.location.reload();
+  };
+
+  // If user doesn't have proper role, show appropriate message
+  if (currentUser && currentUser.role !== 'admin' && currentUser.role !== 'librarian') {
+    return (
+      <Box>
+        <Alert severity="warning" sx={{ mb: 3 }}>
+          Тек әкімші немесе кітапханашылар пайдаланушылар тізіміне қол жеткізе алады
+        </Alert>
+        <Button 
+          variant="contained" 
+          onClick={() => navigate('/')}
+        >
+          Басты бетке оралу
+        </Button>
+      </Box>
+    );
+  }
+
+  // Handle loading or missing user data
+  if (!currentUser) {
+    return (
+      <Box>
+        <Alert severity="warning" sx={{ mb: 3 }}>
+          Пайдаланушы мәліметтері жүктелмеді
+        </Alert>
+        <Button 
+          variant="contained" 
+          onClick={handleFixAdminRole}
+          sx={{ mr: 2 }}
+        >
+          Рөлді жөндеу
+        </Button>
+        <Button 
+          variant="outlined"
+          onClick={() => navigate('/login')}
+        >
+          Жүйеге кіру
+        </Button>
+      </Box>
+    );
+  }
+
   return (
     <Box>
       {/* Заголовок и кнопка добавления */}
@@ -234,19 +375,30 @@ const UsersList = () => {
         <Typography variant="h5" fontWeight="medium">
           Пайдаланушылар
         </Typography>
-        <Button 
-          variant="contained" 
-          startIcon={<AddIcon />}
-          onClick={() => navigate('/users/new')}
-        >
-          Пайдаланушы қосу
-        </Button>
+        <Box>
+          {currentUser && (
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              Ағымдағы рөл: {translateRole(currentUser.role)}
+            </Typography>
+          )}
+          <Button 
+            variant="contained" 
+            startIcon={<AddIcon />}
+            onClick={() => navigate('/users/new')}
+          >
+            Пайдаланушы қосу
+          </Button>
+        </Box>
       </Box>
 
       {/* Сообщение об успешном действии */}
-      {actionSuccess && (
-        <Alert severity="success" sx={{ mb: 3 }}>
-          {actionSuccess}
+      {message.text && (
+        <Alert 
+          severity={message.type} 
+          sx={{ mb: 3 }}
+          onClose={() => setMessage({ type: '', text: '' })}
+        >
+          {message.text}
         </Alert>
       )}
 

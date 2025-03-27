@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { 
   Box, 
   AppBar, 
@@ -17,7 +17,11 @@ import {
   useTheme, 
   Avatar, 
   Menu,
-  MenuItem
+  MenuItem,
+  Badge,
+  Container,
+  SwipeableDrawer,
+  CssBaseline
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -28,9 +32,10 @@ import {
   Category as CategoryIcon,
   Logout as LogoutIcon,
   AccountCircle as AccountCircleIcon,
-  Settings as SettingsIcon
+  Settings as SettingsIcon,
+  Notifications as NotificationsIcon,
+  ArrowBack as ArrowBackIcon
 } from '@mui/icons-material';
-import { useLocation } from 'react-router-dom';
 import useAuth from '../../hooks/useAuth';
 
 /**
@@ -38,7 +43,7 @@ import useAuth from '../../hooks/useAuth';
  * 
  * @description Бұл компонент қосымша интерфейсінің негізгі құрылымын анықтайды,
  * оның ішінде аппбар, навигациялық сайдбар және басты мазмұн. Ол барлық қорғалған 
- * беттер үшін қолданылады.
+ * беттер үшін қолданылады. Мобильді және десктоп құрылғыларға бейімделген.
  */
 
 // Сайдбар ені
@@ -59,12 +64,21 @@ const Layout = () => {
   const location = useLocation();
   const { currentUser, logout } = useAuth();
   
-  // Медиа сұраныстар
+  // Медиа сұраныстар - мобильді құрылғыларды анықтау
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   
   // Күй айнымалылары
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [userMenuAnchor, setUserMenuAnchor] = useState(null);
+  const [mobileOpen, setMobileOpen] = useState(false); // Мобильді мәзірдің ашық/жабық күйі
+  const [userMenuAnchor, setUserMenuAnchor] = useState(null); // Пайдаланушы мәзірінің якорі
+  const [notificationsAnchor, setNotificationsAnchor] = useState(null); // Хабарландыру мәзірінің якорі
+  const [unreadNotifications, setUnreadNotifications] = useState(2); // Оқылмаған хабарландырулар саны
+
+  // Мобильді құрылғыларда беттің жүктелуі кезінде сайдбарды жабу
+  useEffect(() => {
+    if (isMobile) {
+      setMobileOpen(false);
+    }
+  }, [isMobile, location.pathname]);
 
   /**
    * Мобильді мәзірді ашу/жабу
@@ -86,6 +100,21 @@ const Layout = () => {
    */
   const handleUserMenuClose = () => {
     setUserMenuAnchor(null);
+  };
+
+  /**
+   * Хабарландыру мәзірін ашу
+   * @param {Event} event - Тінтуір оқиғасы
+   */
+  const handleNotificationsOpen = (event) => {
+    setNotificationsAnchor(event.currentTarget);
+  };
+
+  /**
+   * Хабарландыру мәзірін жабу
+   */
+  const handleNotificationsClose = () => {
+    setNotificationsAnchor(null);
   };
 
   /**
@@ -114,12 +143,24 @@ const Layout = () => {
   // Сайдбар мазмұны
   const drawer = (
     <Box sx={{ overflow: 'auto' }}>
-      <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {/* Логотип және атау - мобильді құрылғылар үшін жабу батырмасын қосу */}
+      <Box sx={{ 
+        p: 2, 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: isMobile ? 'space-between' : 'center'
+      }}>
         <Typography variant="h6" component="div" sx={{ fontWeight: 'bold', color: theme.palette.primary.main }}>
           Нархоз Кітапхана
         </Typography>
+        {isMobile && (
+          <IconButton onClick={handleDrawerToggle} color="inherit">
+            <ArrowBackIcon />
+          </IconButton>
+        )}
       </Box>
       <Divider />
+      {/* Навигация элементтері */}
       <List>
         {menuItems.map((item) => (
           <ListItem key={item.path} disablePadding>
@@ -152,6 +193,7 @@ const Layout = () => {
         ))}
       </List>
       <Divider />
+      {/* Жүйеден шығу батырмасы */}
       <List>
         <ListItem disablePadding>
           <ListItemButton onClick={handleLogout}>
@@ -167,6 +209,7 @@ const Layout = () => {
 
   return (
     <Box sx={{ display: 'flex' }}>
+      <CssBaseline />
       {/* Жоғарғы панель */}
       <AppBar position="fixed" sx={{ 
         zIndex: (theme) => theme.zIndex.drawer + 1,
@@ -174,16 +217,46 @@ const Layout = () => {
         color: 'black'
       }}>
         <Toolbar>
+          {/* Мобильді мәзір батырмасы */}
           <IconButton
             color="inherit"
-            aria-label="open drawer"
+            aria-label="мәзірді ашу"
             edge="start"
             onClick={handleDrawerToggle}
             sx={{ mr: 2, display: { md: 'none' } }}
           >
             <MenuIcon />
           </IconButton>
+          
+          {/* Мобильді көрініс үшін логотип */}
+          {isMobile && (
+            <Typography 
+              variant="h6" 
+              component="div" 
+              sx={{ 
+                flexGrow: 1, 
+                fontWeight: 'bold',
+                color: theme.palette.primary.main 
+              }}
+            >
+              Нархоз
+            </Typography>
+          )}
+          
           <Box sx={{ flexGrow: 1 }} />
+          
+          {/* Хабарландырулар */}
+          <IconButton 
+            color="inherit" 
+            onClick={handleNotificationsOpen}
+            sx={{ mr: 1 }}
+          >
+            <Badge badgeContent={unreadNotifications} color="primary">
+              <NotificationsIcon />
+            </Badge>
+          </IconButton>
+          
+          {/* Пайдаланушы мәзірі */}
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <IconButton
               onClick={handleUserMenuOpen}
@@ -202,6 +275,7 @@ const Layout = () => {
                 </Avatar>
               )}
             </IconButton>
+            {/* Мобильді емес құрылғыларда пайдаланушы атын көрсету */}
             <Typography variant="body1" sx={{ ml: 1, display: { xs: 'none', sm: 'block' } }}>
               {currentUser?.name || 'Пайдаланушы'}
             </Typography>
@@ -241,47 +315,120 @@ const Layout = () => {
               Шығу
             </MenuItem>
           </Menu>
+          
+          {/* Хабарландырулар мәзірі */}
+          <Menu
+            anchorEl={notificationsAnchor}
+            open={Boolean(notificationsAnchor)}
+            onClose={handleNotificationsClose}
+            transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+            anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+            PaperProps={{
+              sx: { width: 320, maxHeight: 400 }
+            }}
+          >
+            <Box sx={{ p: 2, borderBottom: `1px solid ${theme.palette.divider}` }}>
+              <Typography variant="subtitle1" fontWeight="medium">
+                Хабарландырулар
+              </Typography>
+            </Box>
+            
+            {/* Хабарландырулар тізімі - нақты деректермен ауыстырыңыз */}
+            <MenuItem onClick={handleNotificationsClose}>
+              <Box sx={{ width: '100%' }}>
+                <Typography variant="body2" fontWeight="medium">
+                  Кітапхана жүйесіне қош келдіңіз
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Бүгін, 10:30
+                </Typography>
+              </Box>
+            </MenuItem>
+            
+            <MenuItem onClick={handleNotificationsClose}>
+              <Box sx={{ width: '100%' }}>
+                <Typography variant="body2" fontWeight="medium">
+                  5 мерзімі өткен қарыз табылды
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Кеше, 15:45
+                </Typography>
+              </Box>
+            </MenuItem>
+            
+            <Divider />
+            <Box sx={{ p: 1, textAlign: 'center' }}>
+              <Typography 
+                variant="body2" 
+                color="primary" 
+                sx={{ cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
+                onClick={() => {
+                  handleNotificationsClose();
+                  navigate('/notifications');
+                }}
+              >
+                Барлық хабарландыруларды көру
+              </Typography>
+            </Box>
+          </Menu>
         </Toolbar>
       </AppBar>
 
-      {/* Мобильді сайдбар */}
-      <Drawer
-        variant="temporary"
-        open={mobileOpen}
-        onClose={handleDrawerToggle}
-        ModalProps={{
-          keepMounted: true,
-        }}
-        sx={{
-          display: { xs: 'block', md: 'none' },
-          '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
-        }}
-      >
-        {drawer}
-      </Drawer>
-
-      {/* Десктоп сайдбар */}
-      <Drawer
-        variant="permanent"
-        sx={{
-          display: { xs: 'none', md: 'block' },
-          '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
-        }}
-        open
-      >
-        {drawer}
-      </Drawer>
+      {/* Мобильді сайдбар - SwipeableDrawer тип қолдану */}
+      {isMobile ? (
+        <SwipeableDrawer
+          variant="temporary"
+          open={mobileOpen}
+          onOpen={() => setMobileOpen(true)}
+          onClose={() => setMobileOpen(false)}
+          ModalProps={{
+            keepMounted: true, // Мобильді өнімділікті жақсарту
+          }}
+          sx={{
+            '& .MuiDrawer-paper': { 
+              boxSizing: 'border-box', 
+              width: drawerWidth,
+              borderRight: `1px solid ${theme.palette.divider}`
+            },
+          }}
+        >
+          {drawer}
+        </SwipeableDrawer>
+      ) : (
+        // Десктоп сайдбар - тұрақты көрсетілген
+        <Drawer
+          variant="permanent"
+          sx={{
+            width: drawerWidth,
+            flexShrink: 0,
+            [`& .MuiDrawer-paper`]: { 
+              width: drawerWidth, 
+              boxSizing: 'border-box',
+              borderRight: `1px solid ${theme.palette.divider}`
+            },
+          }}
+          open
+        >
+          <Toolbar /> {/* AppBar биіктігіне тең кеңістік */}
+          {drawer}
+        </Drawer>
+      )}
 
       {/* Негізгі мазмұн */}
-      <Box component="main" sx={{ 
-        flexGrow: 1, 
-        p: 3, 
-        width: { md: `calc(100% - ${drawerWidth}px)` }, 
-        minHeight: '100vh',
-        backgroundColor: '#f5f5f5',
-        marginTop: '64px'
-      }}>
-        <Outlet />
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          p: { xs: 2, sm: 3 },
+          width: { xs: '100%', md: `calc(100% - ${drawerWidth}px)` },
+          minHeight: '100vh',
+          backgroundColor: '#f5f5f5',
+        }}
+      >
+        <Toolbar /> {/* AppBar биіктігіне тең кеңістік */}
+        <Container maxWidth="xl" sx={{ mt: 2 }}>
+          <Outlet />
+        </Container>
       </Box>
     </Box>
   );

@@ -10,28 +10,33 @@ import {
   FormControl, 
   InputLabel, 
   Select,
-  FormHelperText,
   Divider,
   CircularProgress,
   Alert,
   Card,
   CardMedia,
   IconButton,
-  useTheme
+  Container,
+  useTheme,
+  useMediaQuery,
+  FormHelperText
 } from '@mui/material';
 import { 
   ArrowBack as ArrowBackIcon,
   Save as SaveIcon,
   Upload as UploadIcon,
-  Delete as DeleteIcon
+  Delete as DeleteIcon,
+  Book as BookIcon
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
+import bookService from '../../services/bookService';
 
-const BooksForm = () => {
+const BookForm = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const { id } = useParams();
   const isEditMode = Boolean(id);
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   // Состояния
   const [loading, setLoading] = useState(isEditMode);
@@ -48,10 +53,10 @@ const BooksForm = () => {
     author: '',
     categoryId: '',
     description: '',
-    publicationYear: '',
-    language: '',
-    totalCopies: '',
-    availableCopies: '',
+    publicationYear: new Date().getFullYear().toString(),
+    language: 'Қазақ тілі',
+    totalCopies: '1',
+    availableCopies: '1',
     isbn: '',
     cover: 'default-book-cover.jpg'
   });
@@ -68,59 +73,78 @@ const BooksForm = () => {
     isbn: ''
   });
 
-  // Загрузка данных книги при редактировании
-  useEffect(() => {
-    if (isEditMode) {
-      // В реальном приложении здесь будет запрос к API для получения данных книги
-      setTimeout(() => {
-        setFormData({
-          title: 'Қазақ әдебиетінің тарихы',
-          author: 'Мұхтар Әуезов',
-          categoryId: '1',
-          description: 'Қазақ әдебиетінің тарихы туралы кең ауқымды зерттеу',
-          publicationYear: '2018',
-          language: 'Казахский',
-          totalCopies: '10',
-          availableCopies: '5',
-          isbn: '9789965357528',
-          cover: 'default-book-cover.jpg'
-        });
-        setCoverPreview('/path/to/sample/cover.jpg');
-        setLoading(false);
-      }, 1000);
-    }
+  // Языки
+  const languages = [
+    { value: 'Қазақ тілі', label: 'Қазақ тілі' },
+    { value: 'Орыс тілі', label: 'Орыс тілі' },
+    { value: 'Ағылшын тілі', label: 'Ағылшын тілі' }
+  ];
 
-    // Загрузка списка категорий
-    // В реальном приложении здесь будет запрос к API
-    setCategories([
-      { id: '1', name: 'Әдебиет' },
-      { id: '2', name: 'Экономика' },
-      { id: '3', name: 'Математика' },
-      { id: '4', name: 'Қаржы' },
-      { id: '5', name: 'Маркетинг' },
-      { id: '6', name: 'Информатика' },
-      { id: '7', name: 'Бухгалтерия' },
-      { id: '8', name: 'Менеджмент' },
-      { id: '9', name: 'Бизнес' },
-      { id: '10', name: 'Саясаттану' },
-      { id: '11', name: 'Физика' }
-    ]);
+  // Загрузка данных книги и категорий
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        // Загрузка категорий
+        const categoriesResponse = await bookService.getCategories();
+        if (categoriesResponse.success) {
+          setCategories(categoriesResponse.data || []);
+        }
+        
+        // Если режим редактирования, загружаем данные книги
+        if (isEditMode) {
+          const bookResponse = await bookService.getBook(id);
+          
+          if (bookResponse.success && bookResponse.data) {
+            const book = bookResponse.data;
+            
+            setFormData({
+              title: book.title || '',
+              author: book.author || '',
+              categoryId: book.categoryId?.toString() || '',
+              description: book.description || '',
+              publicationYear: book.publicationYear?.toString() || '',
+              language: book.language || 'Қазақ тілі',
+              totalCopies: book.totalCopies?.toString() || '1',
+              availableCopies: book.availableCopies?.toString() || '1',
+              isbn: book.isbn || '',
+              cover: book.cover || 'default-book-cover.jpg'
+            });
+            
+            // Если есть обложка, загружаем предпросмотр
+            if (book.cover && book.cover !== 'default-book-cover.jpg') {
+              const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+              setCoverPreview(`${apiUrl}/uploads/covers/${book.cover}`);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Деректерді жүктеу қатесі:', err);
+        setError('Деректерді жүктеу кезінде қате орын алды.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
   }, [id, isEditMode]);
 
   // Обработчик изменения полей формы
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData({
-      ...formData,
+    setFormData(prev => ({
+      ...prev,
       [name]: value
-    });
+    }));
 
     // Сброс ошибок при вводе
     if (formErrors[name]) {
-      setFormErrors({
-        ...formErrors,
+      setFormErrors(prev => ({
+        ...prev,
         [name]: ''
-      });
+      }));
     }
 
     // Автоматическое обновление доступных копий при изменении общего количества
@@ -136,6 +160,13 @@ const BooksForm = () => {
   const handleCoverChange = (e) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
+      
+      // Проверка размера файла (максимум 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        setError('Файл көлемі 5МБ-дан аспауы керек');
+        return;
+      }
+      
       setCoverFile(file);
       
       // Создание URL для предпросмотра
@@ -153,12 +184,10 @@ const BooksForm = () => {
     setCoverPreview(null);
     
     // В режиме редактирования устанавливаем обложку по умолчанию
-    if (isEditMode) {
-      setFormData({
-        ...formData,
-        cover: 'default-book-cover.jpg'
-      });
-    }
+    setFormData(prev => ({
+      ...prev,
+      cover: 'default-book-cover.jpg'
+    }));
   };
 
   // Валидация формы
@@ -231,13 +260,13 @@ const BooksForm = () => {
 
   // Проверка формата ISBN
   const isValidISBN = (isbn) => {
-    // Простая проверка - более сложная валидация может быть реализована при необходимости
+    // Простая проверка
     const regex = /^(?=(?:\D*\d){10}(?:(?:\D*\d){3})?$)[\d-]+$/;
     return regex.test(isbn);
   };
 
   // Обработчик отправки формы
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     
     // Валидация формы
@@ -247,18 +276,62 @@ const BooksForm = () => {
 
     setSaving(true);
     setError(null);
+    setSuccess(false);
     
-    // В реальном приложении здесь будет запрос к API
-    setTimeout(() => {
-      // Имитация успешного сохранения
-      setSuccess(true);
-      setSaving(false);
+    try {
+      // Подготовка данных для API
+      const bookData = {
+        ...formData,
+        totalCopies: parseInt(formData.totalCopies, 10),
+        availableCopies: parseInt(formData.availableCopies, 10),
+        publicationYear: parseInt(formData.publicationYear, 10),
+        categoryId: formData.categoryId ? parseInt(formData.categoryId, 10) : undefined
+      };
       
-      // Перенаправление на список книг после короткой задержки
+      // Преобразование языка в формат API
+      if (bookData.language === 'Қазақ тілі') {
+        bookData.language = 'Казахский';
+      } else if (bookData.language === 'Орыс тілі') {
+        bookData.language = 'Русский';
+      } else if (bookData.language === 'Ағылшын тілі') {
+        bookData.language = 'Английский';
+      }
+      
+      let response;
+      
+      // Создание или обновление книги
+      if (isEditMode) {
+        response = await bookService.updateBook(id, bookData);
+      } else {
+        response = await bookService.createBook(bookData);
+      }
+      
+      if (!response.success) {
+        throw new Error(response.message || 'Кітапты сақтау кезінде қате орын алды');
+      }
+      
+      const bookId = response.data?.id || id;
+      
+      // Если есть новая обложка, загружаем ее
+      if (coverFile) {
+        const uploadResponse = await bookService.uploadBookCover(bookId, coverFile);
+        if (!uploadResponse.success) {
+          console.error('Мұқабаны жүктеу қатесі:', uploadResponse.message);
+        }
+      }
+      
+      setSuccess(true);
+      
+      // Переход на список книг после короткой задержки
       setTimeout(() => {
         navigate('/books');
       }, 1500);
-    }, 2000);
+    } catch (err) {
+      console.error('Кітапты сақтау қатесі:', err);
+      setError(err.message || 'Кітапты сақтау кезінде қате орын алды');
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (loading) {
@@ -270,292 +343,382 @@ const BooksForm = () => {
   }
 
   return (
-    <Box>
-      {/* Заголовок и кнопка возврата */}
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-        <IconButton 
-          color="inherit" 
-          onClick={() => navigate('/books')}
-          sx={{ mr: 1 }}
+    <Container maxWidth="lg">
+      <Box sx={{ py: 3 }}>
+        {/* Заголовок и кнопка возврата */}
+        <Box sx={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          mb: 4,
+          flexDirection: isMobile ? 'column' : 'row',
+          alignItems: isMobile ? 'flex-start' : 'center',
+          gap: isMobile ? 2 : 0
+        }}>
+          <IconButton 
+            color="inherit" 
+            onClick={() => navigate('/books')}
+            sx={{ mr: isMobile ? 0 : 2 }}
+          >
+            <ArrowBackIcon />
+          </IconButton>
+          <Typography variant={isMobile ? "h6" : "h5"} fontWeight="600">
+            {isEditMode ? 'Кітапты өңдеу' : 'Жаңа кітап қосу'}
+          </Typography>
+        </Box>
+
+        {/* Сообщения об ошибках и успешном сохранении */}
+        {error && (
+          <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
+            {error}
+          </Alert>
+        )}
+        
+        {success && (
+          <Alert severity="success" sx={{ mb: 3 }}>
+            Кітап сәтті {isEditMode ? 'жаңартылды' : 'қосылды'}!
+          </Alert>
+        )}
+
+        {/* Форма добавления/редактирования книги */}
+        <Paper 
+          elevation={3} 
+          sx={{ 
+            p: { xs: 2, sm: 3 }, 
+            borderRadius: 2,
+            boxShadow: '0 4px 20px rgba(0,0,0,0.05)'
+          }}
         >
-          <ArrowBackIcon />
-        </IconButton>
-        <Typography variant="h5" fontWeight="medium">
-          {isEditMode ? 'Кітапты өңдеу' : 'Жаңа кітап қосу'}
-        </Typography>
-      </Box>
-
-      {/* Сообщения об ошибках и успешном сохранении */}
-      {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
-          {error}
-        </Alert>
-      )}
-      
-      {success && (
-        <Alert severity="success" sx={{ mb: 3 }}>
-          Кітап сәтті {isEditMode ? 'жаңартылды' : 'қосылды'}!
-        </Alert>
-      )}
-
-      {/* Форма добавления/редактирования книги */}
-      <Paper sx={{ p: 3 }}>
-        <form onSubmit={handleSubmit}>
-          <Grid container spacing={3}>
-            {/* Левая колонка */}
-            <Grid item xs={12} md={8}>
-              <Grid container spacing={2}>
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="Кітап атауы"
-                    name="title"
-                    value={formData.title}
-                    onChange={handleChange}
-                    error={Boolean(formErrors.title)}
-                    helperText={formErrors.title}
-                    required
-                  />
-                </Grid>
-                
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    label="Автор"
-                    name="author"
-                    value={formData.author}
-                    onChange={handleChange}
-                    error={Boolean(formErrors.author)}
-                    helperText={formErrors.author}
-                    required
-                  />
-                </Grid>
-                
-                <Grid item xs={12} sm={6}>
-                  <FormControl fullWidth error={Boolean(formErrors.categoryId)} required>
-                    <InputLabel id="category-label">Категория</InputLabel>
-                    <Select
-                      labelId="category-label"
-                      name="categoryId"
-                      value={formData.categoryId}
+          <form onSubmit={handleSubmit}>
+            <Grid container spacing={{ xs: 2, md: 3 }}>
+              {/* Левая колонка - основная информация */}
+              <Grid item xs={12} md={8}>
+                <Grid container spacing={2}>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      label="Кітап атауы"
+                      name="title"
+                      value={formData.title}
                       onChange={handleChange}
-                      label="Категория"
-                    >
-                      {categories.map((category) => (
-                        <MenuItem key={category.id} value={category.id}>
-                          {category.name}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                    {formErrors.categoryId && (
-                      <FormHelperText>{formErrors.categoryId}</FormHelperText>
-                    )}
-                  </FormControl>
-                </Grid>
-                
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="Сипаттама"
-                    name="description"
-                    value={formData.description}
-                    onChange={handleChange}
-                    multiline
-                    rows={4}
-                    error={Boolean(formErrors.description)}
-                    helperText={formErrors.description}
-                    required
-                  />
-                </Grid>
-                
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    label="Жарияланған жыл"
-                    name="publicationYear"
-                    value={formData.publicationYear}
-                    onChange={handleChange}
-                    type="number"
-                    inputProps={{ min: 1000, max: new Date().getFullYear() }}
-                    error={Boolean(formErrors.publicationYear)}
-                    helperText={formErrors.publicationYear}
-                    required
-                  />
-                </Grid>
-                
-                <Grid item xs={12} sm={6}>
-                  <FormControl fullWidth error={Boolean(formErrors.language)} required>
-                    <InputLabel id="language-label">Тіл</InputLabel>
-                    <Select
-                      labelId="language-label"
-                      name="language"
-                      value={formData.language}
-                      onChange={handleChange}
-                      label="Тіл"
-                    >
-                      <MenuItem value="Русский">Орыс тілі</MenuItem>
-                      <MenuItem value="Английский">Ағылшын тілі</MenuItem>
-                      <MenuItem value="Казахский">Қазақ тілі</MenuItem>
-                    </Select>
-                    {formErrors.language && (
-                      <FormHelperText>{formErrors.language}</FormHelperText>
-                    )}
-                  </FormControl>
-                </Grid>
-                
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    label="Даналар саны"
-                    name="totalCopies"
-                    value={formData.totalCopies}
-                    onChange={handleChange}
-                    type="number"
-                    inputProps={{ min: 1 }}
-                    error={Boolean(formErrors.totalCopies)}
-                    helperText={formErrors.totalCopies}
-                    required
-                  />
-                </Grid>
-                
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    label="Қол жетімді даналар"
-                    name="availableCopies"
-                    value={formData.availableCopies}
-                    onChange={handleChange}
-                    type="number"
-                    inputProps={{ 
-                      min: 0, 
-                      max: formData.totalCopies ? parseInt(formData.totalCopies, 10) : undefined 
-                    }}
-                    disabled={!formData.totalCopies}
-                  />
-                </Grid>
-                
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="ISBN"
-                    name="isbn"
-                    value={formData.isbn}
-                    onChange={handleChange}
-                    error={Boolean(formErrors.isbn)}
-                    helperText={formErrors.isbn || 'Міндетті емес'}
-                  />
-                </Grid>
-              </Grid>
-            </Grid>
-            
-            {/* Правая колонка - загрузка обложки */}
-            <Grid item xs={12} md={4}>
-              <Typography variant="subtitle1" gutterBottom>
-                Кітап мұқабасы
-              </Typography>
-              
-              <Card
-                sx={{
-                  width: '100%',
-                  height: 300,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  border: `1px dashed ${theme.palette.divider}`,
-                  position: 'relative',
-                  mb: 2
-                }}
-              >
-                {coverPreview ? (
-                  <>
-                    <CardMedia
-                      component="img"
-                      image={coverPreview}
-                      alt="Кітап мұқабасы"
-                      sx={{ 
-                        width: '100%',
-                        height: '100%',
-                        objectFit: 'contain',
-                        p: 2
+                      error={Boolean(formErrors.title)}
+                      helperText={formErrors.title}
+                      required
+                      variant="outlined"
+                      placeholder="Кітап атауын енгізіңіз"
+                      InputLabelProps={{
+                        shrink: true,
                       }}
                     />
-                    <IconButton
-                      sx={{
-                        position: 'absolute',
-                        right: 8,
-                        top: 8,
-                        bgcolor: 'background.paper',
-                        boxShadow: 1,
-                        '&:hover': {
-                          bgcolor: 'error.lighter',
-                        }
+                  </Grid>
+                  
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth
+                      label="Автор"
+                      name="author"
+                      value={formData.author}
+                      onChange={handleChange}
+                      error={Boolean(formErrors.author)}
+                      helperText={formErrors.author}
+                      required
+                      variant="outlined"
+                      placeholder="Автор атын енгізіңіз"
+                      InputLabelProps={{
+                        shrink: true,
                       }}
-                      onClick={handleRemoveCover}
-                    >
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </>
-                ) : (
-                  <Box 
-                    sx={{ 
-                      textAlign: 'center',
-                      p: 3
-                    }}
-                  >
-                    <UploadIcon sx={{ fontSize: 40, color: 'text.secondary', mb: 1 }} />
-                    <Typography variant="body2" color="text.secondary">
-                      Кітап мұқабасын жүктеу үшін түртіңіз
-                    </Typography>
-                    <Typography variant="caption" color="text.disabled">
-                      PNG, JPG форматтары (макс. 5MB)
-                    </Typography>
-                  </Box>
-                )}
-              </Card>
+                    />
+                  </Grid>
+                  
+                  <Grid item xs={12} sm={6}>
+                    <FormControl fullWidth error={Boolean(formErrors.categoryId)} required>
+                      <InputLabel id="category-label">Категория</InputLabel>
+                      <Select
+                        labelId="category-label"
+                        name="categoryId"
+                        value={formData.categoryId}
+                        onChange={handleChange}
+                        label="Категория"
+                        placeholder="Категорияны таңдаңыз"
+                      >
+                        {categories.map((category) => (
+                          <MenuItem key={category.id} value={category.id.toString()}>
+                            {category.name}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                      {formErrors.categoryId && (
+                        <FormHelperText>{formErrors.categoryId}</FormHelperText>
+                      )}
+                    </FormControl>
+                  </Grid>
+                  
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      label="Сипаттама"
+                      name="description"
+                      value={formData.description}
+                      onChange={handleChange}
+                      multiline
+                      rows={4}
+                      error={Boolean(formErrors.description)}
+                      helperText={formErrors.description}
+                      required
+                      variant="outlined"
+                      placeholder="Кітап сипаттамасын енгізіңіз"
+                      InputLabelProps={{
+                        shrink: true,
+                      }}
+                    />
+                  </Grid>
+                  
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth
+                      label="Жарияланған жыл"
+                      name="publicationYear"
+                      value={formData.publicationYear}
+                      onChange={handleChange}
+                      type="number"
+                      inputProps={{ min: 1000, max: new Date().getFullYear() }}
+                      error={Boolean(formErrors.publicationYear)}
+                      helperText={formErrors.publicationYear}
+                      required
+                      variant="outlined"
+                      placeholder="Жылды енгізіңіз"
+                      InputLabelProps={{
+                        shrink: true,
+                      }}
+                    />
+                  </Grid>
+                  
+                  <Grid item xs={12} sm={6}>
+                    <FormControl fullWidth error={Boolean(formErrors.language)} required>
+                      <InputLabel id="language-label">Тіл</InputLabel>
+                      <Select
+                        labelId="language-label"
+                        name="language"
+                        value={formData.language}
+                        onChange={handleChange}
+                        label="Тіл"
+                      >
+                        {languages.map((option) => (
+                          <MenuItem key={option.value} value={option.value}>
+                            {option.label}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                      {formErrors.language && (
+                        <FormHelperText>{formErrors.language}</FormHelperText>
+                      )}
+                    </FormControl>
+                  </Grid>
+                  
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth
+                      label="Даналар саны"
+                      name="totalCopies"
+                      value={formData.totalCopies}
+                      onChange={handleChange}
+                      type="number"
+                      inputProps={{ min: 1 }}
+                      error={Boolean(formErrors.totalCopies)}
+                      helperText={formErrors.totalCopies}
+                      required
+                      variant="outlined"
+                      placeholder="Даналар санын енгізіңіз"
+                      InputLabelProps={{
+                        shrink: true,
+                      }}
+                    />
+                  </Grid>
+                  
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth
+                      label="Қол жетімді даналар"
+                      name="availableCopies"
+                      value={formData.availableCopies}
+                      onChange={handleChange}
+                      type="number"
+                      inputProps={{ 
+                        min: 0, 
+                        max: formData.totalCopies ? parseInt(formData.totalCopies, 10) : undefined 
+                      }}
+                      disabled={!formData.totalCopies}
+                      variant="outlined"
+                      placeholder="Қол жетімді даналар санын енгізіңіз"
+                      InputLabelProps={{
+                        shrink: true,
+                      }}
+                    />
+                  </Grid>
+                  
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      label="ISBN"
+                      name="isbn"
+                      value={formData.isbn}
+                      onChange={handleChange}
+                      error={Boolean(formErrors.isbn)}
+                      helperText={formErrors.isbn || 'Міндетті емес'}
+                      variant="outlined"
+                      placeholder="ISBN нөмірін енгізіңіз"
+                      InputLabelProps={{
+                        shrink: true,
+                      }}
+                    />
+                  </Grid>
+                </Grid>
+              </Grid>
               
-              <Button
-                variant="outlined"
-                component="label"
-                startIcon={<UploadIcon />}
-                fullWidth
-              >
-                Мұқаба жүктеу
-                <input
-                  type="file"
-                  accept="image/*"
-                  hidden
-                  onChange={handleCoverChange}
-                />
-              </Button>
-            </Grid>
-            
-            {/* Нижняя панель с кнопками */}
-            <Grid item xs={12}>
-              <Divider sx={{ mb: 2 }} />
-              <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
-                <Button 
-                  variant="outlined" 
-                  onClick={() => navigate('/books')}
-                  disabled={saving}
+              {/* Правая колонка - загрузка обложки */}
+              <Grid item xs={12} md={4}>
+                <Typography variant="subtitle1" fontWeight="500" gutterBottom>
+                  Кітап мұқабасы
+                </Typography>
+                
+                <Card
+                  sx={{
+                    width: '100%',
+                    height: isMobile ? 200 : 300,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    border: `1px dashed ${theme.palette.divider}`,
+                    borderRadius: 2,
+                    position: 'relative',
+                    mb: 2,
+                    transition: 'all 0.3s ease',
+                    '&:hover': {
+                      borderColor: theme.palette.primary.main,
+                    }
+                  }}
                 >
-                  Бас тарту
-                </Button>
-                <Button 
-                  type="submit" 
-                  variant="contained" 
-                  startIcon={saving ? <CircularProgress size={20} /> : <SaveIcon />}
-                  disabled={saving}
+                  {coverPreview ? (
+                    <>
+                      <CardMedia
+                        component="img"
+                        image={coverPreview}
+                        alt="Кітап мұқабасы"
+                        sx={{ 
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'contain',
+                          p: 2
+                        }}
+                      />
+                      <IconButton
+                        sx={{
+                          position: 'absolute',
+                          right: 8,
+                          top: 8,
+                          bgcolor: 'background.paper',
+                          boxShadow: 2,
+                          '&:hover': {
+                            bgcolor: 'error.lighter',
+                          }
+                        }}
+                        onClick={handleRemoveCover}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </>
+                  ) : (
+                    <Box 
+                      sx={{ 
+                        textAlign: 'center',
+                        p: 3,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center'
+                      }}
+                    >
+                      <BookIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 1, opacity: 0.5 }} />
+                      <Typography variant="body2" color="text.secondary" fontWeight="500">
+                        Кітап мұқабасын жүктеу үшін түртіңіз
+                      </Typography>
+                      <Typography variant="caption" color="text.disabled" sx={{ mt: 1 }}>
+                        PNG, JPG форматтары (макс. 5MB)
+                      </Typography>
+                    </Box>
+                  )}
+                </Card>
+                
+                <Button
+                  variant="outlined"
+                  component="label"
+                  startIcon={<UploadIcon />}
+                  fullWidth
+                  sx={{ 
+                    py: 1.5,
+                    borderRadius: 1,
+                    textTransform: 'none',
+                    fontWeight: 500
+                  }}
                 >
-                  {saving ? 'Сақталуда...' : 'Сақтау'}
+                  Мұқаба жүктеу
+                  <input
+                    type="file"
+                    accept="image/*"
+                    hidden
+                    onChange={handleCoverChange}
+                  />
                 </Button>
-              </Box>
+              </Grid>
+              
+              {/* Нижняя панель с кнопками */}
+              <Grid item xs={12}>
+                <Divider sx={{ my: 2 }} />
+                <Box sx={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between',
+                  flexDirection: isMobile ? 'column' : 'row',
+                  gap: 2
+                }}>
+                  <Button 
+                    variant="outlined" 
+                    onClick={() => navigate('/books')}
+                    disabled={saving}
+                    sx={{ 
+                      py: 1.5,
+                      borderRadius: 1,
+                      textTransform: 'none',
+                      fontWeight: 500,
+                      order: isMobile ? 2 : 1
+                    }}
+                    fullWidth={isMobile}
+                  >
+                    Бас тарту
+                  </Button>
+                  <Button 
+                    type="submit" 
+                    variant="contained" 
+                    startIcon={saving ? <CircularProgress size={20} /> : <SaveIcon />}
+                    disabled={saving}
+                    sx={{ 
+                      py: 1.5,
+                      borderRadius: 1,
+                      textTransform: 'none',
+                      fontWeight: 500,
+                      boxShadow: 2,
+                      order: isMobile ? 1 : 2
+                    }}
+                    fullWidth={isMobile}
+                  >
+                    {saving ? 'Сақталуда...' : 'Сақтау'}
+                  </Button>
+                </Box>
+              </Grid>
             </Grid>
-          </Grid>
-        </form>
-      </Paper>
-    </Box>
+          </form>
+        </Paper>
+      </Box>
+    </Container>
   );
 };
 
-export default BooksForm;
+export default BookForm;

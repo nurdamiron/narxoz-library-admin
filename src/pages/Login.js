@@ -50,6 +50,7 @@ const Login = () => {
   const handleLogin = async (e) => {
     e.preventDefault();
     
+    // Валидация полей
     if (!email || !password) {
       setError('Email және құпия сөз енгізіңіз');
       return;
@@ -57,26 +58,26 @@ const Login = () => {
     
     setLoading(true);
     setError('');
-
+  
     try {
-      // AuthContext арқылы кіру
-      await login(email, password);
+      // Попытка входа через сервис аутентификации
+      const userData = await login(email, password);
+      
+      // Проверка успешного входа и сохраненных данных
+      console.log('Login successful, user data:', userData);
+      
+      // Верификация сохраненных данных
+      const storedUser = localStorage.getItem('auth_user');
+      const parsedUser = storedUser ? JSON.parse(storedUser) : null;
+      console.log('Stored user data:', parsedUser);
+      
+      // При успешном входе перенаправляем на главную страницу
       navigate('/');
     } catch (error) {
       console.error('Login error:', error);
       
-      // Қате жағдайында тиісті хабарламаны көрсету
-      if (error.response) {
-        if (error.response.status === 401) {
-          setError('Қате email немесе құпия сөз');
-        } else {
-          setError(`Серверге қосылу кезінде қате орын алды: ${error.response.status}`);
-        }
-      } else if (error.request) {
-        setError('Серверден жауап алу мүмкін болмады. Желі байланысын тексеріңіз.');
-      } else {
-        setError(`Қате орын алды: ${error.message}`);
-      }
+      // Показываем пользователю понятное сообщение об ошибке
+      setError(error.message || 'Кіру кезінде қате орын алды. Тіркелгі деректерін тексеріңіз.');
     } finally {
       setLoading(false);
     }
@@ -137,6 +138,7 @@ const Login = () => {
                 autoFocus
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                disabled={loading}
               />
               <TextField
                 margin="normal"
@@ -149,6 +151,7 @@ const Login = () => {
                 autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                disabled={loading}
                 InputProps={{
                   endAdornment: (
                     <InputAdornment position="end">
@@ -156,6 +159,7 @@ const Login = () => {
                         aria-label="toggle password visibility"
                         onClick={() => setShowPassword(!showPassword)}
                         edge="end"
+                        disabled={loading}
                       >
                         {showPassword ? <VisibilityOff /> : <Visibility />}
                       </IconButton>
@@ -176,6 +180,15 @@ const Login = () => {
                   'Кіру'
                 )}
               </Button>
+              
+              {/* Подсказка для разработки */}
+              {process.env.NODE_ENV === 'development' && (
+                <Alert severity="info" sx={{ mt: 2 }}>
+                  <Typography variant="body2">
+                    Demo режим: admin@narxoz.kz / Admin123!
+                  </Typography>
+                </Alert>
+              )}
             </Box>
           </CardContent>
         </Card>
