@@ -1,73 +1,79 @@
+// src/pages/books/BooksList.js
 import React, { useState, useEffect } from 'react';
 import { 
   Box, 
   Paper, 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableContainer, 
-  TableHead, 
-  TableRow, 
-  TablePagination,
   Button, 
   Typography, 
-  TextField, 
-  InputAdornment, 
-  IconButton,
-  Chip,
-  Tooltip,
-  Menu,
-  MenuItem,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  CircularProgress,
-  Alert
+  Alert,
+  Container,
+  useTheme,
+  useMediaQuery,
 } from '@mui/material';
-import { 
-  Add as AddIcon, 
-  Search as SearchIcon, 
-  Edit as EditIcon, 
-  Delete as DeleteIcon,
-  MoreVert as MoreVertIcon,
-  FilterList as FilterListIcon
-} from '@mui/icons-material';
+import { Add as AddIcon } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import bookService from '../../services/bookService';
 
+// Component imports
+import BooksTable from './components/BooksTable';
+import BooksFilter from './components/BooksFilter';
+import LoadingBackdrop from '../../components/common/LoadingBackdrop';
+import CustomSnackbar from '../../components/common/CustomSnackbar';
+import DeleteConfirmDialog from './components/DeleteConfirmDialog';
+
 const BooksList = () => {
+  const theme = useTheme();
   const navigate = useNavigate();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   
-  // Состояния
+  // Күй айнымалылары
   const [loading, setLoading] = useState(true);
   const [books, setBooks] = useState([]);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [search, setSearch] = useState('');
   const [totalBooks, setTotalBooks] = useState(0);
-  const [anchorEl, setAnchorEl] = useState(null);
   const [selectedBookId, setSelectedBookId] = useState(null);
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarSeverity, setSnackbarSeverity] = useState('success');
+  const [filter, setFilter] = useState({
+    category: '',
+    language: '',
+    availability: ''
+  });
   
-  // Функция загрузки книг с сервера
+  // Кітаптарды жүктеу
   const fetchBooks = async () => {
     try {
       setLoading(true);
       setError(null);
       
-      // Подготовка параметров запроса
+      // Сұраныс параметрлерін дайындау
       const params = {
-        page: page + 1, // Серверная пагинация может начинаться с 1
+        page: page + 1, // API пагинациясы 1-ден басталады
         limit: rowsPerPage
       };
       
-      // Добавляем поисковый запрос, если он есть
+      // Іздеу сұранысын қосу
       if (search) {
         params.search = search;
+      }
+      
+      // Фильтрлерді қосу
+      if (filter.category) {
+        params.categoryId = filter.category;
+      }
+      
+      if (filter.language) {
+        params.language = filter.language;
+      }
+      
+      if (filter.availability) {
+        params.available = filter.availability === 'available';
       }
       
       const response = await bookService.getBooks(params);
@@ -76,251 +82,196 @@ const BooksList = () => {
         setBooks(response.data || []);
         setTotalBooks(response.total || 0);
       } else {
-        setError(response.message || 'Не удалось загрузить список книг');
+        setError(response.message || 'Кітаптар тізімін жүктеу кезінде қате орын алды');
+        showSnackbar('Кітаптар тізімін жүктеу кезінде қате орын алды', 'error');
       }
     } catch (err) {
-      console.error('Ошибка при загрузке книг:', err);
-      setError('Произошла ошибка при загрузке книг. Пожалуйста, попробуйте позже.');
+      console.error('Кітаптарды жүктеу қатесі:', err);
+      setError('Кітаптар тізімін жүктеу кезінде қате орын алды');
+      showSnackbar('Кітаптар тізімін жүктеу кезінде қате орын алды', 'error');
     } finally {
       setLoading(false);
     }
   };
-
-  // Загрузка данных при изменении параметров (страница, количество на странице, поиск)
+  
+  // Параметрлер өзгергенде кітаптарды жүктеу
   useEffect(() => {
     fetchBooks();
-  }, [page, rowsPerPage, search]);
-
-  // Обработчики пагинации
+  }, [page, rowsPerPage, search, filter]);
+  
+  // Snackbar көрсету функциясы
+  const showSnackbar = (message, severity = 'success') => {
+    setSnackbarMessage(message);
+    setSnackbarSeverity(severity);
+    setSnackbarOpen(true);
+  };
+  
+  // Snackbar жабу функциясы
+  const handleSnackbarClose = () => {
+    setSnackbarOpen(false);
+  };
+  
+  // Беттеу өзгерісін өңдеу
   const handleChangePage = (event, newPage) => {
     setPage(newPage);
   };
-
+  
+  // Бетте көрсетілетін жолдар санын өзгерту
   const handleChangeRowsPerPage = (event) => {
     setRowsPerPage(parseInt(event.target.value, 10));
     setPage(0);
   };
-
-  // Обработчик изменения поиска
+  
+  // Іздеу өрісінің өзгерісін өңдеу
   const handleSearchChange = (e) => {
     setSearch(e.target.value);
-    setPage(0); // Сбрасываем на первую страницу при изменении поиска
+    setPage(0); // Іздеу өзгергенде бірінші бетке оралу
   };
-
-  // Обработка действий над книгами
-  const handleMenuOpen = (event, bookId) => {
-    setAnchorEl(event.currentTarget);
+  
+  // Фильтр өзгерісін өңдеу
+  const handleFilterChange = (name, value) => {
+    setFilter(prev => ({
+      ...prev,
+      [name]: value
+    }));
+    setPage(0); // Фильтр өзгергенде бірінші бетке оралу
+  };
+  
+  // Кітап жою диалогын көрсету
+  const handleShowDeleteDialog = (bookId) => {
     setSelectedBookId(bookId);
-  };
-
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-  };
-
-  const handleDeleteClick = () => {
-    handleMenuClose();
     setOpenDeleteDialog(true);
   };
-
-  const handleDeleteDialogClose = () => {
+  
+  // Кітап жою диалогын жабу
+  const handleCloseDeleteDialog = () => {
     setOpenDeleteDialog(false);
+    setSelectedBookId(null);
   };
-
-  // Подтверждение удаления книги
-  const confirmDelete = async () => {
-    setDeleteLoading(true);
+  
+  // Кітапты жою
+  const handleDeleteBook = async () => {
     try {
+      setDeleteLoading(true);
+      
       const response = await bookService.deleteBook(selectedBookId);
       
       if (response.success) {
-        // Перезагружаем список книг после успешного удаления
-        await fetchBooks();
+        showSnackbar('Кітап сәтті жойылды', 'success');
+        fetchBooks(); // Тізімді жаңарту
       } else {
-        setError(response.message || 'Ошибка при удалении книги');
+        showSnackbar(response.message || 'Кітапты жою кезінде қате орын алды', 'error');
       }
     } catch (err) {
-      console.error('Ошибка при удалении книги:', err);
-      setError('Произошла ошибка при удалении книги');
+      console.error('Кітапты жою қатесі:', err);
+      showSnackbar('Кітапты жою кезінде қате орын алды', 'error');
     } finally {
       setDeleteLoading(false);
       setOpenDeleteDialog(false);
+      setSelectedBookId(null);
     }
   };
-
-  // Переход к редактированию книги
-  const handleEditClick = () => {
-    handleMenuClose();
-    navigate(`/books/edit/${selectedBookId}`);
+  
+  // Кітапты өңдеу бетіне өту
+  const handleEditBook = (bookId) => {
+    navigate(`/books/edit/${bookId}`);
   };
-
+  
   return (
-    <Box>
-      {/* Заголовок и кнопка добавления */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h5" fontWeight="medium">
-          Кітаптар
-        </Typography>
-        <Button 
-          variant="contained" 
-          startIcon={<AddIcon />}
-          onClick={() => navigate('/books/new')}
-        >
-          Кітап қосу
-        </Button>
-      </Box>
-
-      {/* Сообщение об ошибке */}
-      {error && (
-        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
-
-      {/* Панель поиска и фильтров */}
-      <Paper sx={{ p: 2, mb: 3 }}>
-        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-          <TextField
-            label="Іздеу"
-            variant="outlined"
-            size="small"
-            value={search}
-            onChange={handleSearchChange}
-            sx={{ flexGrow: 1 }}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon />
-                </InputAdornment>
-              ),
-            }}
-          />
-          <Button 
-            variant="outlined" 
-            startIcon={<FilterListIcon />}
+    <Container maxWidth="xl">
+      <Box sx={{ py: { xs: 2, sm: 3 } }}>
+        {/* Тақырып және кітап қосу батырмасы */}
+        <Box sx={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          mb: 3,
+          flexDirection: isMobile ? 'column' : 'row',
+          gap: isMobile ? 2 : 0,
+        }}>
+          <Typography 
+            variant={isMobile ? "h6" : "h5"} 
+            component="h1" 
+            fontWeight="600"
           >
-            Сүзгілеу
+            Кітаптар
+          </Typography>
+          <Button 
+            variant="contained" 
+            startIcon={<AddIcon />}
+            onClick={() => navigate('/books/new')}
+            sx={{
+              px: 2,
+              py: 1,
+              textTransform: 'none',
+              fontWeight: 500,
+              boxShadow: 2,
+              borderRadius: 1,
+              alignSelf: isMobile ? 'stretch' : 'auto'
+            }}
+          >
+            Жаңа кітап қосу
           </Button>
         </Box>
-      </Paper>
-
-      {/* Таблица книг */}
-      <Paper>
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Аты</TableCell>
-                <TableCell>Автор</TableCell>
-                <TableCell>Категория</TableCell>
-                <TableCell>Жыл</TableCell>
-                <TableCell>Тіл</TableCell>
-                <TableCell>Қол жетімді / Барлығы</TableCell>
-                <TableCell>Күй</TableCell>
-                <TableCell align="right">Әрекеттер</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={8} align="center" sx={{ py: 3 }}>
-                    <CircularProgress size={30} />
-                  </TableCell>
-                </TableRow>
-              ) : books.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={8} align="center" sx={{ py: 3 }}>
-                    Кітаптар табылмады
-                  </TableCell>
-                </TableRow>
-              ) : (
-                books.map((book) => (
-                  <TableRow key={book.id} hover>
-                    <TableCell>{book.title}</TableCell>
-                    <TableCell>{book.author}</TableCell>
-                    <TableCell>{book.category?.name || ''}</TableCell>
-                    <TableCell>{book.publicationYear}</TableCell>
-                    <TableCell>
-                      {book.language === 'Казахский' ? 'Қазақ тілі' : 
-                       book.language === 'Русский' ? 'Орыс тілі' : 
-                       book.language === 'Английский' ? 'Ағылшын тілі' : book.language}
-                    </TableCell>
-                    <TableCell>{`${book.availableCopies} / ${book.totalCopies}`}</TableCell>
-                    <TableCell>
-                      <Chip 
-                        label={book.availableCopies > 0 ? "Қол жетімді" : "Қол жетімді емес"} 
-                        color={book.availableCopies > 0 ? "success" : "error"} 
-                        size="small"
-                        variant="outlined"
-                      />
-                    </TableCell>
-                    <TableCell align="right">
-                      <IconButton size="small" onClick={(e) => handleMenuOpen(e, book.id)}>
-                        <MoreVertIcon />
-                      </IconButton>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
-
-        {/* Пагинация */}
-        <TablePagination
-          rowsPerPageOptions={[5, 10, 25]}
-          component="div"
-          count={totalBooks}
-          rowsPerPage={rowsPerPage}
-          page={page}
-          onPageChange={handleChangePage}
-          onRowsPerPageChange={handleChangeRowsPerPage}
-          labelRowsPerPage="Жолдар:"
-          labelDisplayedRows={({ from, to, count }) => `${from}-${to} / ${count}`}
-        />
-      </Paper>
-
-      {/* Меню действий */}
-      <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleMenuClose}
-      >
-        <MenuItem onClick={handleEditClick}>
-          <EditIcon fontSize="small" sx={{ mr: 1 }} />
-          Өңдеу
-        </MenuItem>
-        <MenuItem onClick={handleDeleteClick} sx={{ color: 'error.main' }}>
-          <DeleteIcon fontSize="small" sx={{ mr: 1 }} />
-          Жою
-        </MenuItem>
-      </Menu>
-
-      {/* Диалог подтверждения удаления */}
-      <Dialog
-        open={openDeleteDialog}
-        onClose={handleDeleteDialogClose}
-      >
-        <DialogTitle>Кітапты жою</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            Бұл кітапты жойғыңыз келе ме? Бұл әрекетті кері қайтару мүмкін емес.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleDeleteDialogClose} disabled={deleteLoading}>
-            Бас тарту
-          </Button>
-          <Button 
-            onClick={confirmDelete} 
-            color="error" 
-            disabled={deleteLoading}
-            startIcon={deleteLoading ? <CircularProgress size={20} /> : null}
+        
+        {/* Қате хабарламасы */}
+        {error && (
+          <Alert 
+            severity="error" 
+            sx={{ mb: 3 }} 
+            onClose={() => setError(null)}
+            variant="filled"
           >
-            Жою
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </Box>
+            {error}
+          </Alert>
+        )}
+        
+        {/* Іздеу және фильтрлер */}
+        <BooksFilter 
+          search={search}
+          filter={filter}
+          handleSearchChange={handleSearchChange}
+          handleFilterChange={handleFilterChange}
+        />
+        
+        {/* Кітаптар кестесі */}
+        <BooksTable 
+          books={books}
+          loading={loading}
+          page={page}
+          rowsPerPage={rowsPerPage}
+          totalBooks={totalBooks}
+          handleChangePage={handleChangePage}
+          handleChangeRowsPerPage={handleChangeRowsPerPage}
+          handleEditBook={handleEditBook}
+          handleDeleteBook={handleShowDeleteDialog}
+          isMobile={isMobile}
+        />
+      </Box>
+      
+      {/* Жою диалогы */}
+      <DeleteConfirmDialog 
+        open={openDeleteDialog}
+        loading={deleteLoading}
+        onConfirm={handleDeleteBook}
+        onCancel={handleCloseDeleteDialog}
+      />
+      
+      {/* Хабарлама */}
+      <CustomSnackbar 
+        open={snackbarOpen}
+        message={snackbarMessage}
+        severity={snackbarSeverity}
+        onClose={handleSnackbarClose}
+        theme={theme}
+      />
+      
+      {/* Жою кезінде жүктеу экраны */}
+      <LoadingBackdrop 
+        open={deleteLoading} 
+        message="Кітап жойылуда..." 
+      />
+    </Container>
   );
 };
 

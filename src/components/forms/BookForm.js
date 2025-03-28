@@ -249,20 +249,68 @@ const BookForm = () => {
       }
     }
 
-    if (formData.isbn && !isValidISBN(formData.isbn)) {
-      errors.isbn = 'Жарамды ISBN нөмірін енгізіңіз';
-      isValid = false;
-    }
+    // if (formData.isbn && !isValidISBN(formData.isbn)) {
+    //   errors.isbn = 'Жарамды ISBN нөмірін енгізіңіз';
+    //   isValid = false;
+    // }
 
     setFormErrors(errors);
     return isValid;
   };
 
-  // Проверка формата ISBN
   const isValidISBN = (isbn) => {
-    // Простая проверка
-    const regex = /^(?=(?:\D*\d){10}(?:(?:\D*\d){3})?$)[\d-]+$/;
-    return regex.test(isbn);
+    // ISBN болмаса немесе бос болса, true қайтарамыз (міндетті емес өріс)
+    if (!isbn || isbn.trim() === '') {
+      return true;
+    }
+    
+    // Барлық сызықшалар мен бос орындарды жою
+    const cleanedISBN = isbn.replace(/[-\s]/g, '');
+    
+    // ISBN ұзындығын тексеру
+    if (cleanedISBN.length !== 10 && cleanedISBN.length !== 13) {
+      return false;
+    }
+    
+    // Барлық таңбалар сандар ма екенін тексеру (ISBN-10 үшін соңғы таңба 'X' болуы мүмкін)
+    if (cleanedISBN.length === 10) {
+      if (!/^[0-9]{9}[0-9X]$/.test(cleanedISBN)) {
+        return false;
+      }
+      
+      // ISBN-10 тексеру сомасын есептеу
+      let sum = 0;
+      for (let i = 0; i < 9; i++) {
+        sum += parseInt(cleanedISBN.charAt(i)) * (10 - i);
+      }
+      
+      let checkDigit = 11 - (sum % 11);
+      if (checkDigit === 11) {
+        checkDigit = 0;
+      } else if (checkDigit === 10) {
+        checkDigit = 'X';
+      }
+      
+      return checkDigit.toString() === cleanedISBN.charAt(9);
+    } else {
+      // ISBN-13 үшін тексеру
+      if (!/^[0-9]{13}$/.test(cleanedISBN)) {
+        return false;
+      }
+      
+      // ISBN-13 тексеру сомасын есептеу
+      let sum = 0;
+      for (let i = 0; i < 12; i++) {
+        sum += parseInt(cleanedISBN.charAt(i)) * (i % 2 === 0 ? 1 : 3);
+      }
+      
+      let checkDigit = 10 - (sum % 10);
+      if (checkDigit === 10) {
+        checkDigit = 0;
+      }
+      
+      return checkDigit.toString() === cleanedISBN.charAt(12);
+    }
   };
 
   // Обработчик отправки формы
