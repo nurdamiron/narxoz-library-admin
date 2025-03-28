@@ -1,51 +1,41 @@
 import React, { useState, useEffect, useContext } from 'react';
 import {
-  Box,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
+  Box, 
+  Paper, 
+  Table, 
+  TableBody, 
+  TableCell, 
+  TableContainer, 
+  TableHead, 
+  TableRow, 
   TablePagination,
-  Typography,
-  TextField,
-  InputAdornment,
+  Typography, 
+  TextField, 
+  InputAdornment, 
   Chip,
-  IconButton,
-  Menu,
-  MenuItem,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
+  Button,
   CircularProgress,
   Alert,
   FormControl,
   InputLabel,
   Select,
+  MenuItem,
   Grid,
-  useTheme,
   Avatar,
-  Button
+  useTheme
 } from '@mui/material';
 import {
   Search as SearchIcon,
-  MoreVert as MoreVertIcon,
   Book as BookIcon,
   CheckCircle as CheckCircleIcon,
   Schedule as ScheduleIcon,
   Warning as WarningIcon,
-  ExtensionOutlined as ExtendIcon,
-  Info as InfoIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 import api from '../../services/api';
 
-// Функция для форматирования даты
+// Helper function to format dates
 const formatDate = (dateString) => {
   if (!dateString) return '-';
   const date = new Date(dateString);
@@ -56,7 +46,7 @@ const formatDate = (dateString) => {
   });
 };
 
-// Компонент для обложки книги
+// Book cover component
 const BookCover = ({ book }) => {
   const theme = useTheme();
   
@@ -69,7 +59,7 @@ const BookCover = ({ book }) => {
   );
 };
 
-// Компонент статуса займа
+// Borrow status component
 const BorrowStatus = ({ status }) => {
   const getStatusColor = (status) => {
     switch (status) {
@@ -109,7 +99,7 @@ const BorrowStatus = ({ status }) => {
 };
 
 /**
- * Қарызға алулар тізімі компоненті
+ * BorrowsList component - displays a list of borrowed books
  */
 const BorrowsList = () => {
   const theme = useTheme();
@@ -122,52 +112,53 @@ const BorrowsList = () => {
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [totalBorrows, setTotalBorrows] = useState(0);
-  const [anchorEl, setAnchorEl] = useState(null);
-  const [selectedBorrowId, setSelectedBorrowId] = useState(null);
-  const [returnDialogOpen, setReturnDialogOpen] = useState(false);
-  const [extendDialogOpen, setExtendDialogOpen] = useState(false);
-  const [actionLoading, setActionLoading] = useState(false);
+  const [totalRows, setTotalRows] = useState(0);
   const [message, setMessage] = useState({ type: '', text: '' });
 
-  // Загрузка данных с сервера
+  // Fetch data from server
   useEffect(() => {
     fetchBorrows();
   }, [page, rowsPerPage, search, statusFilter]);
 
   /**
-   * Получение списка займов с фильтрацией и пагинацией
+   * Fetch borrows with pagination and filtering
    */
   const fetchBorrows = async () => {
     setLoading(true);
     
     try {
-      // Подготовка параметров запроса
+      // Setup query parameters
       const params = {
-        page: page + 1,
+        page: page + 1, // API uses 1-based indexing
         limit: rowsPerPage
       };
       
-      // Добавление параметров поиска и фильтрации
+      // Add optional filters if provided
       if (search) params.search = search;
       if (statusFilter) params.status = statusFilter;
       
       console.log('Fetching borrows with params:', params);
       
-      // Запрос к API
+      // Make the API request - using the getUserBorrows endpoint which works
       const response = await api.get('/borrows', { params });
       
-      console.log('API response:', response);
-      
+      // Handle the API response
       if (response && response.success) {
+        console.log('Borrows response:', response);
         setBorrows(response.data || []);
-        setTotalBorrows(response.total || 0);
+        setTotalRows(response.total || 0);
       } else {
-        throw new Error('API returned unsuccessfully');
+        setMessage({
+          type: 'warning',
+          text: 'Қарызға алулар табылмады'
+        });
+        setBorrows([]);
+        setTotalRows(0);
       }
     } catch (error) {
       console.error('Error fetching borrows:', error);
       
+      // Create helpful error message
       let errorMessage = 'Қарызға алуларды жүктеу кезінде қате орын алды';
       
       if (error.response) {
@@ -184,14 +175,14 @@ const BorrowsList = () => {
       });
       
       setBorrows([]);
-      setTotalBorrows(0);
+      setTotalRows(0);
     } finally {
       setLoading(false);
     }
   };
 
   /**
-   * Обработчики пагинации
+   * Pagination handlers
    */
   const handleChangePage = (event, newPage) => {
     setPage(newPage);
@@ -203,7 +194,7 @@ const BorrowsList = () => {
   };
 
   /**
-   * Обработчик поиска займов
+   * Search handler
    */
   const handleSearchChange = (e) => {
     setSearch(e.target.value);
@@ -211,7 +202,7 @@ const BorrowsList = () => {
   };
 
   /**
-   * Обработчик фильтра по статусу
+   * Status filter handler
    */
   const handleStatusFilterChange = (e) => {
     setStatusFilter(e.target.value);
@@ -219,35 +210,22 @@ const BorrowsList = () => {
   };
 
   /**
-   * Обработчики меню действий
-   */
-  const handleMenuOpen = (event, borrowId) => {
-    setAnchorEl(event.currentTarget);
-    setSelectedBorrowId(borrowId);
-  };
-
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-  };
-
-  /**
-   * Переход к детальной информации о займе
+   * Navigate to borrow details
    */
   const handleViewDetails = (borrowId) => {
-    handleMenuClose();
     navigate(`/borrows/${borrowId}`);
   };
 
   return (
     <Box>
-      {/* Заголовок */}
+      {/* Title */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h5" fontWeight="medium">
           Қарызға алулар
         </Typography>
       </Box>
 
-      {/* Сообщение */}
+      {/* Message */}
       {message.text && (
         <Alert 
           severity={message.type} 
@@ -258,7 +236,7 @@ const BorrowsList = () => {
         </Alert>
       )}
 
-      {/* Панель поиска и фильтров */}
+      {/* Search and filter panel */}
       <Paper sx={{ p: 2, mb: 3 }}>
         <Grid container spacing={2}>
           <Grid item xs={12} md={6}>
@@ -297,7 +275,7 @@ const BorrowsList = () => {
         </Grid>
       </Paper>
 
-      {/* Таблица займов */}
+      {/* Borrows table */}
       <Paper>
         <TableContainer>
           <Table>
@@ -386,11 +364,11 @@ const BorrowsList = () => {
           </Table>
         </TableContainer>
 
-        {/* Пагинация */}
+        {/* Pagination */}
         <TablePagination
           rowsPerPageOptions={[5, 10, 25]}
           component="div"
-          count={totalBorrows}
+          count={totalRows}
           rowsPerPage={rowsPerPage}
           page={page}
           onPageChange={handleChangePage}

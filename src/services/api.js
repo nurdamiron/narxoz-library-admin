@@ -1,18 +1,14 @@
 // src/services/api.js
 import axios from 'axios';
-import apiDebugger from '../utils/apiDebugger';
 
 /**
- * API клиент
- * 
- * @description Бұл модуль серверге HTTP сұраныстар жіберуге арналған
- * API клиентін жасайды және оны реттейді.
+ * API Client for making HTTP requests to the server
  */
 
-// API негізгі URL
+// API base URL - use environment variable or default
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
-// Axios данасын жасау
+// Create Axios instance
 const apiClient = axios.create({
   baseURL: API_URL,
   headers: {
@@ -20,151 +16,197 @@ const apiClient = axios.create({
   }
 });
 
-// Сұраныс интерцептор - әр сұранысқа аутентификация хедерін қосу
+/**
+ * Create Basic Auth header
+ * 
+ * @param {string} username - User email/username
+ * @param {string} password - Password
+ * @returns {string} - Basic Auth header value
+ */
+const createBasicAuthHeader = (username, password) => {
+  if (!username || !password) {
+    console.warn('Missing username or password for Basic Auth');
+    return null;
+  }
+  return 'Basic ' + btoa(`${username}:${password}`);
+};
+
+// Request interceptor to add auth headers
 apiClient.interceptors.request.use(
   (config) => {
-    // Егер хедерде аутентификация бар болса, оны қолдану
+    // If auth headers already exist, use them
     if (config.headers['Authorization']) {
       return config;
     }
     
-    // Жоқ болса, localStorage-дан мәліметтерді алу
+    // Get credentials from localStorage
     const username = localStorage.getItem('auth_username');
     const password = localStorage.getItem('auth_password');
     
-    // Отладка үшін аутентификация мәліметтерін журналға жазу
-    console.log('Auth credentials:', username, password);
-    
+    // Add authorization header if credentials exist
     if (username && password) {
-      // Basic аутентификация хедерін жасау
-      config.headers['Authorization'] = 'Basic ' + btoa(`${username}:${password}`);
+      config.headers['Authorization'] = createBasicAuthHeader(username, password);
       
-      // Админ үшін арнайы жағдай
+      // Special case for admin user
       if (username === 'admin@narxoz.kz') {
         config.headers['X-User-Role'] = 'admin';
       }
     }
     
-    // Отладка үшін сұранысты журналға жазу
-    apiDebugger.logRequest(config.url, config.method, config.data);
-    console.log('Request headers:', config.headers);
+    // For debugging - log the request
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`🚀 ${config.method?.toUpperCase()} ${config.url}`, {
+        params: config.params,
+        data: config.data
+      });
+    }
     
     return config;
   },
   (error) => {
+    console.error('Request error:', error);
     return Promise.reject(error);
   }
 );
 
-// Жауап интерцептор - қателерді өңдеу және журналға жазу
+// Response interceptor to handle errors
 apiClient.interceptors.response.use(
   (response) => {
-    // Сәтті жауапты журналға жазу
-    apiDebugger.logResponse(response.config.url, response);
-    return response;
+    // If the API returns data in a specific structure, standardize it
+    if (response.data && response.data.hasOwnProperty('success')) {
+      return response.data;
+    }
+    
+    // Otherwise, wrap the response in a standard format
+    return { 
+      success: true, 
+      data: response.data,
+      status: response.status
+    };
   },
   (error) => {
-    // Қатені журналға жазу
-    apiDebugger.logError(error.config?.url || 'unknown endpoint', error);
+    // Log error details
+    if (process.env.NODE_ENV === 'development') {
+      console.error(`❌ API error:`, {
+        url: error.config?.url,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+    }
     
-    // Аутентификация қателерін өңдеу
+    // Handle authentication errors
     if (error.response && error.response.status === 401) {
-      // Аутентификация мәліметтерін тазалау
+      // Clear authentication data
       localStorage.removeItem('auth_username');
       localStorage.removeItem('auth_password');
       localStorage.removeItem('auth_user');
       localStorage.removeItem('isAuthenticated');
       
-      // Егер кіру бетінде болмасақ, сол бетке қайта бағыттау
-      if (!window.location.pathname.includes('/login')) {
-        window.location.href = '/login';
+      // Redirect to login page if not already there
+      if (window.location.pathname !== '/login') {
+        console.log('Session expired. Redirecting to login page...');
+        // Use a small delay to allow the current code to complete
+        setTimeout(() => {
+          window.location.href = '/login';
+        }, 100);
       }
     }
     
-    return Promise.reject(error);
+    // Return a standardized error response
+    return Promise.reject({
+      ...error,
+      formattedError: {
+        success: false,
+        message: error.response?.data?.message || error.message || 'Unknown error',
+        status: error.response?.status || 500
+      }
+    });
   }
 );
 
-// API клиентінің негізгі әдістері
+// API client methods
 const api = {
   /**
-   * GET сұранысы
+   * GET request
    * 
-   * @param {string} url - Сұраныс URL-і
-   * @param {Object} params - Сұраныс параметрлері
-   * @returns {Promise} Сұраныс нәтижесі
+   * @param {string} url - Request URL
+   * @param {Object} options - Request options
+   * @returns {Promise} Request result
    */
-  get: async (url, params = {}) => {
+  get: async (url, options = {}) => {
     try {
-      const response = await apiClient.get(url, { params });
-      return response.data;
+      const response = await apiClient.get(url, options);
+      return response;
     } catch (error) {
-      console.error(`GET ${url} қатесі:`, error);
-      throw error;
+      console.error(`GET ${url} error:`, error.formattedError || error);
+      throw error.formattedError || error;
     }
   },
   
   /**
-   * POST сұранысы
+   * POST request
    * 
-   * @param {string} url - Сұраныс URL-і
-   * @param {Object} data - Сұраныс денесі
-   * @returns {Promise} Сұраныс нәтижесі
+   * @param {string} url - Request URL
+   * @param {Object} data - Request body
+   * @param {Object} options - Request options
+   * @returns {Promise} Request result
    */
-  post: async (url, data = {}) => {
+  post: async (url, data = {}, options = {}) => {
     try {
-      const response = await apiClient.post(url, data);
-      return response.data;
+      const response = await apiClient.post(url, data, options);
+      return response;
     } catch (error) {
-      console.error(`POST ${url} қатесі:`, error);
-      throw error;
+      console.error(`POST ${url} error:`, error.formattedError || error);
+      throw error.formattedError || error;
     }
   },
   
   /**
-   * PUT сұранысы
+   * PUT request
    * 
-   * @param {string} url - Сұраныс URL-і
-   * @param {Object} data - Сұраныс денесі
-   * @returns {Promise} Сұраныс нәтижесі
+   * @param {string} url - Request URL
+   * @param {Object} data - Request body
+   * @param {Object} options - Request options
+   * @returns {Promise} Request result
    */
-  put: async (url, data = {}) => {
+  put: async (url, data = {}, options = {}) => {
     try {
-      const response = await apiClient.put(url, data);
-      return response.data;
+      const response = await apiClient.put(url, data, options);
+      return response;
     } catch (error) {
-      console.error(`PUT ${url} қатесі:`, error);
-      throw error;
+      console.error(`PUT ${url} error:`, error.formattedError || error);
+      throw error.formattedError || error;
     }
   },
   
   /**
-   * DELETE сұранысы
+   * DELETE request
    * 
-   * @param {string} url - Сұраныс URL-і
-   * @returns {Promise} Сұраныс нәтижесі
+   * @param {string} url - Request URL
+   * @param {Object} options - Request options
+   * @returns {Promise} Request result
    */
-  delete: async (url) => {
+  delete: async (url, options = {}) => {
     try {
-      const response = await apiClient.delete(url);
-      return response.data;
+      const response = await apiClient.delete(url, options);
+      return response;
     } catch (error) {
-      console.error(`DELETE ${url} қатесі:`, error);
-      throw error;
+      console.error(`DELETE ${url} error:`, error.formattedError || error);
+      throw error.formattedError || error;
     }
   },
   
   /**
-   * Файл жүктеу
+   * File upload
    * 
-   * @param {string} url - Сұраныс URL-і
-   * @param {FormData} formData - Жүктелетін файл(дар)
-   * @param {Function} onProgress - Прогресс колбэгі
-   * @returns {Promise} Сұраныс нәтижесі
+   * @param {string} url - Request URL
+   * @param {FormData} formData - Form data with files
+   * @param {Function} onProgress - Progress callback
+   * @returns {Promise} Request result
    */
   uploadFile: async (url, formData, onProgress) => {
     try {
-      // Авторизация заголовкаларын алу
+      // Get auth headers
       const username = localStorage.getItem('auth_username');
       const password = localStorage.getItem('auth_password');
       
@@ -173,31 +215,35 @@ const api = {
       };
       
       if (username && password) {
-        headers['Authorization'] = 'Basic ' + btoa(`${username}:${password}`);
+        headers['Authorization'] = createBasicAuthHeader(username, password);
       }
       
       const response = await apiClient.post(url, formData, {
         headers,
-        onUploadProgress: progressEvent => {
-          if (onProgress) {
-            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            onProgress(percentCompleted);
-          }
-        }
+        onUploadProgress: onProgress ? (progressEvent) => {
+          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          onProgress(percentCompleted);
+        } : undefined
       });
       
-      return response.data;
+      return response;
     } catch (error) {
-      console.error(`File upload to ${url} қатесі:`, error);
-      throw error;
+      console.error(`File upload to ${url} error:`, error.formattedError || error);
+      throw error.formattedError || error;
     }
   },
   
   /**
-   * API клиент данасын алу
-   * @returns {Object} Axios данасы
+   * Get API client instance
+   * @returns {Object} Axios instance
    */
-  getInstance: () => apiClient
+  getInstance: () => apiClient,
+  
+  /**
+   * Get API base URL
+   * @returns {string} API base URL
+   */
+  getBaseUrl: () => API_URL
 };
 
 export default api;

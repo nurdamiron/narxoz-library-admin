@@ -1,103 +1,175 @@
 // src/services/borrowService.js
-import crudService from './crudService';
+import api from './api';
 
 /**
- * Қарызға алу операцияларымен жұмыс істеуге арналған қызмет
- * 
- * @description Бұл сервис кітаптарды қарызға алу және қайтару операцияларын басқарады
+ * Service for handling book borrowing operations
  */
 const borrowService = {
   /**
-   * Пайдаланушының қарызға алуларын алу
+   * Get current user's borrows
    * 
-   * @param {Object} params - Сұраныс параметрлері
-   * @param {number} params.page - Бет нөмірі
-   * @param {number} params.limit - Бір беттегі қарызға алулар саны
-   * @param {string} params.status - Мәртебе бойынша фильтр
-   * @returns {Promise<Object>} Қарызға алулар тізімі
+   * @param {Object} params - Query parameters
+   * @param {number} params.page - Page number
+   * @param {number} params.limit - Items per page
+   * @param {string} params.status - Filter by status
+   * @returns {Promise<Object>} Borrow list and metadata
    */
   getUserBorrows: async (params = {}) => {
-    return crudService.getAll('/borrows', params);
+    try {
+      const response = await api.get('/borrows', { params });
+      return response;
+    } catch (error) {
+      console.error('Error fetching user borrows:', error);
+      throw error;
+    }
   },
 
   /**
-   * Барлық қарызға алуларды алу (тек әкімші/кітапханашы)
+   * Get all borrows (admin/librarian only)
    * 
-   * @param {Object} params - Сұраныс параметрлері
-   * @returns {Promise<Object>} Қарызға алулар тізімі
+   * @param {Object} params - Query parameters
+   * @param {number} params.page - Page number
+   * @param {number} params.limit - Items per page
+   * @param {string} params.status - Filter by status
+   * @param {number} params.userId - Filter by user ID
+   * @param {number} params.bookId - Filter by book ID
+   * @returns {Promise<Object>} Borrow list and metadata
    */
   getAllBorrows: async (params = {}) => {
-    return crudService.getAll('/borrows/all', params);
+    try {
+      const response = await api.get('/borrows/all', { params });
+      return response;
+    } catch (error) {
+      console.error('Error fetching all borrows:', error);
+      throw error;
+    }
   },
 
   /**
-   * Қарызға алуды ID бойынша алу
+   * Get borrow by ID
    * 
-   * @param {string|number} id - Қарызға алу ID-сі
-   * @returns {Promise<Object>} Қарызға алу мәліметтері
+   * @param {number|string} id - Borrow ID
+   * @returns {Promise<Object>} Borrow details
    */
   getBorrow: async (id) => {
-    return crudService.getById('/borrows', id);
+    try {
+      const response = await api.get(`/borrows/${id}`);
+      return response;
+    } catch (error) {
+      console.error(`Error fetching borrow ${id}:`, error);
+      throw error;
+    }
   },
 
   /**
-   * Кітапты қарызға алу
+   * Borrow a book
    * 
-   * @param {Object} data - Қарызға алу мәліметтері
-   * @param {string|number} data.bookId - Кітап ID-сі
-   * @returns {Promise<Object>} Жаңа қарызға алу мәліметтері
+   * @param {Object} data - Borrow data
+   * @param {number} data.bookId - Book ID
+   * @returns {Promise<Object>} New borrow details
    */
   borrowBook: async (data) => {
-    return crudService.create('/borrows', data);
+    try {
+      const response = await api.post('/borrows', data);
+      return response;
+    } catch (error) {
+      console.error('Error borrowing book:', error);
+      throw error;
+    }
   },
 
   /**
-   * Қарызға алынған кітапты қайтару
+   * Return a borrowed book
    * 
-   * @param {string|number} id - Қарызға алу ID-сі
-   * @returns {Promise<Object>} Жаңартылған қарызға алу мәліметтері
+   * @param {number|string} id - Borrow ID
+   * @returns {Promise<Object>} Updated borrow details
    */
   returnBook: async (id) => {
-    return crudService.executeAction(`/borrows/${id}/return`, {}, 'put');
+    try {
+      const response = await api.put(`/borrows/${id}/return`);
+      return response;
+    } catch (error) {
+      console.error(`Error returning borrow ${id}:`, error);
+      throw error;
+    }
   },
 
   /**
-   * Қарызға алу мерзімін ұзарту
+   * Extend borrow period
    * 
-   * @param {string|number} id - Қарызға алу ID-сі
-   * @returns {Promise<Object>} Жаңартылған қарызға алу мәліметтері
+   * @param {number|string} id - Borrow ID
+   * @returns {Promise<Object>} Updated borrow details
    */
   extendBorrow: async (id) => {
-    return crudService.executeAction(`/borrows/${id}/extend`, {}, 'put');
+    try {
+      const response = await api.put(`/borrows/${id}/extend`);
+      return response;
+    } catch (error) {
+      console.error(`Error extending borrow ${id}:`, error);
+      throw error;
+    }
   },
 
   /**
-   * Қарызға алуды жаңарту (тек әкімші/кітапханашы)
+   * Update borrow (admin/librarian only)
    * 
-   * @param {string|number} id - Қарызға алу ID-сі
-   * @param {Object} data - Жаңартылған қарызға алу мәліметтері
-   * @returns {Promise<Object>} Жаңартылған қарызға алу мәліметтері
+   * @param {number|string} id - Borrow ID
+   * @param {Object} data - Updated borrow data
+   * @returns {Promise<Object>} Updated borrow details
    */
   updateBorrow: async (id, data) => {
-    return crudService.update('/borrows', id, data);
+    try {
+      const response = await api.put(`/borrows/${id}`, data);
+      return response;
+    } catch (error) {
+      console.error(`Error updating borrow ${id}:`, error);
+      throw error;
+    }
   },
 
   /**
-   * Мерзімі өткен қарызға алуларды тексеру
+   * Check overdue borrows
    * 
-   * @returns {Promise<Object>} Мерзімі өткен қарызға алулар мәліметтері
+   * @returns {Promise<Object>} Overdue borrows data
    */
   checkOverdueBorrows: async () => {
-    return crudService.executeAction('/borrows/check-overdue', {}, 'get');
+    try {
+      const response = await api.get('/borrows/check-overdue');
+      return response;
+    } catch (error) {
+      console.error('Error checking overdue borrows:', error);
+      throw error;
+    }
   },
 
   /**
-   * Қарызға алу статистикасын алу
+   * Send reminders for books due soon
    * 
-   * @returns {Promise<Object>} Қарызға алу статистикасы
+   * @returns {Promise<Object>} Reminder results
+   */
+  sendDueReminders: async () => {
+    try {
+      const response = await api.get('/borrows/send-reminders');
+      return response;
+    } catch (error) {
+      console.error('Error sending reminders:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get borrow statistics
+   * 
+   * @returns {Promise<Object>} Borrow statistics
    */
   getBorrowStats: async () => {
-    return crudService.executeAction('/borrows/stats', {}, 'get');
+    try {
+      const response = await api.get('/borrows/stats');
+      return response;
+    } catch (error) {
+      console.error('Error fetching borrow stats:', error);
+      throw error;
+    }
   }
 };
 

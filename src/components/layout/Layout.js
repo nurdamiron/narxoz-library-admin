@@ -246,7 +246,7 @@ const Layout = () => {
           <Box sx={{ flexGrow: 1 }} />
           
           {/* Хабарландырулар */}
-          <IconButton 
+          {/* <IconButton 
             color="inherit" 
             onClick={handleNotificationsOpen}
             sx={{ mr: 1 }}
@@ -254,7 +254,7 @@ const Layout = () => {
             <Badge badgeContent={unreadNotifications} color="primary">
               <NotificationsIcon />
             </Badge>
-          </IconButton>
+          </IconButton> */}
           
           {/* Пайдаланушы мәзірі */}
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -289,7 +289,7 @@ const Layout = () => {
             transformOrigin={{ horizontal: 'right', vertical: 'top' }}
             anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
           >
-            <MenuItem onClick={() => {
+            {/* <MenuItem onClick={() => {
               handleUserMenuClose();
               navigate('/profile');
             }}>
@@ -297,8 +297,8 @@ const Layout = () => {
                 <AccountCircleIcon fontSize="small" />
               </ListItemIcon>
               Менің профилім
-            </MenuItem>
-            <MenuItem onClick={() => {
+            </MenuItem> */}
+            {/* <MenuItem onClick={() => {
               handleUserMenuClose();
               navigate('/settings');
             }}>
@@ -306,8 +306,8 @@ const Layout = () => {
                 <SettingsIcon fontSize="small" />
               </ListItemIcon>
               Параметрлер
-            </MenuItem>
-            <Divider />
+            </MenuItem> */}
+            {/* <Divider /> */}
             <MenuItem onClick={handleLogout}>
               <ListItemIcon>
                 <LogoutIcon fontSize="small" />
